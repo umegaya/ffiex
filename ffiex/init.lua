@@ -77,14 +77,26 @@ local generate_cdefs = function (code)
 	repeat
 		local _, offset = string.find(code, '\n', current+1, true)
 		local line = code:sub(current+1, offset)
-		local match,count = line:gsub('.-(extern%s+[_%a][_%w]*%s+[_%a][_%w]*%b()).*', '%1')
-		if count > 0 then
-			decl = (decl .. match .. ";\n")
+		-- matching simple function declaration (e.g. void foo(t1 a1, t2 a2))
+		local _, count = line:gsub('^%s*([_%a][_%w]*%s+[_%a][_%w]*%b()).*', function (s)
+			--print(s)
+			decl = (decl .. "extern " .. s .. ";\n")
+		end)
+		-- matching function declaration with access specifier 
+		-- (e.g. extern void foo(t1 a1, t2 a2), static void bar())
+		-- and not export function declaration contains 'static' specifier
+		if count <= 0 then
+			line:gsub('(.*)%s+([_%a][_%w]*%s+[_%a][_%w]*%b()).*', function (s1, s2)
+				--print(s1 .. "|" .. s2)
+				if not s1:find('static') then
+					decl = (decl .. "extern " .. s2 .. ";\n")
+				end
+			end)
 		end
 		current = offset
 	until not current
 	if #decl > 0 then
-		--print('decl = ' .. decl)
+		-- print('decl = ' .. decl)
 		ffi.cdef(decl)
 	end
 end

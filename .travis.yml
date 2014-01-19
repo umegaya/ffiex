@@ -1,0 +1,22 @@
+language: lua
+compiler:
+  - gcc
+
+before_script:
+  - sudo mkdir -p /usr/local/share/lua/5.1/
+  - sudo chmod -R 777 /usr/local
+
+script: "luajit test.lua"
+
+branches:
+  only:
+    - master
+    - feature/travis_ci
+
+notifications:
+  recipients:
+    - iyatomi+ffiex.test@gmail.com
+  email:
+    on_success: change
+    on_failure: always
+
