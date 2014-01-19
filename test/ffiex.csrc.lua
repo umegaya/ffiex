@@ -4,9 +4,7 @@ local lib,ext = ffi.csrc('test', [[
 #include <stdlib.h>
 #include <stdio.h>
 #define MYID (101)
-extern void hello_csrc(int id, char *buffer) {
-	sprintf(buffer, "id:%d", id);
-}
+extern void hello_csrc(int id, char *buffer) { sprintf(buffer, "id:%d", id); }
 ]])
 
 local msg = ffi.new("char[256]")

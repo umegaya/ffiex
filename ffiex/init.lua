@@ -77,7 +77,7 @@ local generate_cdefs = function (code)
 	repeat
 		local _, offset = string.find(code, '\n', current+1, true)
 		local line = code:sub(current+1, offset)
-		local match,count = line:gsub('.-(extern.+%b()).*', '%1')
+		local match,count = line:gsub('.-(extern%s+[_%a][_%w]*%s+[_%a][_%w]*%b()).*', '%1')
 		if count > 0 then
 			decl = (decl .. match .. ";\n")
 		end
