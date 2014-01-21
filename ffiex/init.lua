@@ -212,6 +212,8 @@ if ffi.os == 'OSX' then
 	-- e.g.  int      atexit_b(void (^)(void)) ; ^!!
 	ffi.undef({"__BLOCKS__"})
 	-- i don't know the reason but OSX __asm alias not works for luajit symbol search
-	ffi.cdef "#define __asm(exp)"
+	ffi.cdef [[
+		#define __asm(exp)
+	]]
 end
 return ffi

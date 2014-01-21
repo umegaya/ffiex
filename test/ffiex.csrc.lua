@@ -1,12 +1,20 @@
 local ffi = require 'ffiex.init'
-ffi.cdef "#include <sys/stat.h>"
+ffi.cdef[[
+	#include <sys/stat.h>
+	int stat64(const char *path, struct stat *sb);
+]]
+ffi.cdef "#include <time.h>"
 
 local ncall = 0
 ffi.exconf.cacher = function (name, code, file, so)
 	--print('cacher', name, code, file, so)
 	local st = ffi.new('struct stat[1]')
-	ffi.C.stat(file, st)
-	print(file..':modified@', st[0].st_mtimespec.tv_sec)
+	if ffi.os == 'OSX' then
+		assert(0 == ffi.C.stat64(file, st), "stat call fails")
+	else
+		assert(0 == ffi.C.stat(file, st), "stat call fails")
+	end
+	print(file..':modified@'..tostring(st[0].st_size).."|"..tostring(st[0].st_mtimespec.tv_sec))
 	if ncall < 2 then
 		assert(name == 'test')
 		assert(file:find('ffiex.csrc.lua'), "file name wrong:" .. file)
