@@ -1,4 +1,9 @@
 language: lua
+
+env:
+  - LUA=""
+  - LUA="luajit"
+
 compiler:
   - gcc
 
@@ -12,6 +17,10 @@ branches:
   only:
     - master
     - feature/travis_ci
+
+install:
+  - sudo apt-get install luajit
+  - sudo apt-get install luarocks
 
 notifications:
   recipients:
