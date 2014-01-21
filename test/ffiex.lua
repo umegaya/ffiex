@@ -1,7 +1,6 @@
 local ffi = require 'ffiex.init'
 
 if ffi.os == 'OSX' then
-	ffi.cdef "#define __asm(exp)"
 	ffi.search("/Applications/Xcode.app/Contents/Developer/usr", "stdarg.h", true)
 end
 

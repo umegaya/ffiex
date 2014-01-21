@@ -1,8 +1,12 @@
 local ffi = require 'ffiex.init'
+ffi.cdef "#include <sys/stat.h>"
 
 local ncall = 0
 ffi.exconf.cacher = function (name, code, file, so)
 	--print('cacher', name, code, file, so)
+	local st = ffi.new('struct stat[1]')
+	ffi.C.stat(file, st)
+	print(file..':modified@', st[0].st_mtimespec.tv_sec)
 	if ncall < 2 then
 		assert(name == 'test')
 		assert(file:find('ffiex.csrc.lua'), "file name wrong:" .. file)
@@ -52,4 +56,4 @@ local lib3,ext3 = ffi.csrc('test2', [[
 void bar(int id) { return id }
 ]])
 
-assert(not lib3, "should be compile error")
+assert(not lib3, "should be nil due to compile error")

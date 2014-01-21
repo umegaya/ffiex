@@ -5,11 +5,11 @@ luarocks unpack ffiex*.src.rock
 pushd ffiex*/ffiex
 luarocks make 
 popd
-OUT = `luajit install_test.lua`
-rm ffiex*.src.rock
-rmdir ffiex* 
-if [ "$OUT" -ne "1000" ]
+OUT=`luajit install_test.lua`
+rm ffiex-*.src.rock
+find . -type d -name "ffiex-*" -exec rm -rf {} \;
+if [ "$OUT" -ne "1000" ];
 then
    exit -1
 fi
-
+echo "install success"
