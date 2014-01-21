@@ -13,7 +13,7 @@ while true do
 				os.exit(-1)
 			end
 		else
-			print('init test fails:' .. file .. '|' .. r)
+			print('init test fails:' .. file .. '|' .. tostring(r))
 			os.exit(-2)
 		end
 	else

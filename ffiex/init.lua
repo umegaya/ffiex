@@ -16,6 +16,7 @@ lcpp.compileFile = function (filename, predefines)
 	return originalCompileFile(filename, predefines)
 end
 local ffi = require 'ffi'
+ffi.exconf = {}
 ffi.path = function (path)
 	if path[#path] ~= '/' then
 		path = (path .. '/')
@@ -100,43 +101,83 @@ local generate_cdefs = function (code)
 		ffi.cdef(decl)
 	end
 end
-local build = function (name, src)
+
+
+-- callback for creating so file cache
+-- src_name : first argument of csrc. mainly used for distinguish each code
+-- code : actual content of code. mainly used for calculating checksum
+-- file : if 2nd parameter given to ffi.csrc, .lua file that calls csrc. otherwise same as src_name
+-- so : built .so filename. if not nil, you should cache it somewhere if you want, 
+-- 		bacaue after calling this function, its removed.
+-- 		otherwise you return so file name path correspond to src_name and code.
+ffi.exconf.cacher = function (src_name, code, file, so)
+	-->print(so, src, is_tmp, luafile, lualine)
+end
+
+local call_cacher = function (src_name, code, is_tmp, so)
+	if is_tmp then
+		local stack,current = debug.traceback(),0
+		local file,ln
+		-- parse output of debug.traceback()
+		-- TODO : need to track the spec change of debug.traceback()
+		repeat
+			local _, offset = string.find(stack, '\n', current+1, true)
+			local line = stack:sub(current+1, offset)
+			local res, count = line:gsub('%s*([^%s:]+):([%d]+).*', function (s1, s2)
+				file, line = s1, s2
+			end)
+			if count > 0 and (not file:find('ffiex/init.lua')) then
+				break
+			end
+			current = offset
+		until not current
+		ffi.exconf.cacher(src_name, code, file, so)
+	else
+		ffi.exconf.cacher(src_name, code, src_name, so)
+	end
+end
+
+local build = function (name, code)
 	local opts = table.concat((ffi.opts or {"-fPIC"}), " ") .. " -I" .. table.concat(searchPath, " -I")
-	local obj
-	if src then
-		-- dummy compile to inject macro definition for external use
-		ffi.cdef(src)
-		-- generate cdefs from source code
-		generate_cdefs(src)
-		-- generate so filename/create tmp file to compile
-		obj = './' .. name .. '.so'
-		name = obj..'.c'
-		local f = io.open(name, 'w')
-		f:write(src)
+	local obase,sbase = os.tmpname(),nil
+	local obj = obase .. '.so'
+	local src,is_tmp
+	if code then
+		sbase = os.tmpname()
+		src,is_tmp = sbase..'.c',true
+
+		local f = io.open(src, 'w')
+		f:write(code)
 		f:close()
 	else
-		-- dummy compile to inject macro definition for external use
-		ffi.cdef(src)
-		-- generate cdefs from source code
+		src = name
 		local f = io.open(name, 'r')
-		generate_cdefs(f:read('*a'))
+		code = f:read('*a')
 		f:close()
-		-- generate so filename
-		obj = './' .. name:gsub('%.c$', '.so')
 	end
-	local ok, r = pcall(io.popen, ('gcc -shared -o %s %s %s'):format(obj, opts, name))
+	local path_from_cache = call_cacher(name, code, is_tmp)
+	if path_from_cache then return path_from_cache,"read from cache" end
+	-- dummy compile to inject macro definition for external use
+	ffi.cdef(code)
+	-- generate cdefs from source code
+	generate_cdefs(code)
+	-- compile .so
+	local ok, r = pcall(os.execute, ('gcc -shared -o %s %s %s'):format(obj, opts, src))
+	local ra, rb
 	if ok then
-		local out = r:read('*a')
-		if src then
-			os.remove(name)
-		end		
-		return obj,out
-	else
-		if src then
-			os.remove(name)
+		if r ~= 0 then
+			ra, rb = nil, r
+		else
+			ra, rb = obj, out
+			call_cacher(name, code, is_tmp, obj)
 		end
-		return nil, r
+	else
+		ra, rb = nil, r
 	end
+	if obase then os.remove(obase) end
+	if sbase then os.remove(sbase) end
+	if is_tmp then os.remove(src) end
+	return ra, rb
 end
 ffi.copt = function (opts)
 	local found = false
@@ -151,11 +192,13 @@ ffi.copt = function (opts)
 	ffi.opts = opts
 end
 ffi.csrc = function (name, src)
-	local path,err = build(name, src)
+	local path,ext = build(name, src)
 	if path then
-		return ffi.load(path),err
+		local lib = ffi.load(path)
+		os.remove(path)
+		return lib,ext
 	else
-		error(err)
+		return nil,ext
 	end
 end
 

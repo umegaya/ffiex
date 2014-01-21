@@ -7,8 +7,8 @@ luarocks make
 popd
 OUT = `luajit install_test.lua`
 rm ffiex*.src.rock
-rmdir -f ffiex* 
-if [ "$OUT" -ne "csrc test" ]
+rmdir ffiex* 
+if [ "$OUT" -ne "1000" ]
 then
    exit -1
 fi
