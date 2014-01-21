@@ -1,4 +1,6 @@
 #!/bin/bash
+# install luajit from git HEAD
+
 luarocks remove ffiex
 luarocks pack ffiex*.rockspec
 luarocks unpack ffiex*.src.rock

@@ -11,7 +11,7 @@ before_script:
   - sudo mkdir -p /usr/local/share/lua/5.1/
   - sudo chmod -R 777 /usr/local
 
-script: "luajit test.lua && sudo bash install.sh"
+script: "sudo travis_install.sh && luajit test.lua && sudo bash install.sh"
 
 branches:
   only:
@@ -19,7 +19,6 @@ branches:
     - feature/travis_ci
 
 install:
-  - sudo apt-get install luajit
   - sudo apt-get install luarocks
 
 notifications:
