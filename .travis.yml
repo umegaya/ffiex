@@ -6,7 +6,7 @@ before_script:
   - sudo mkdir -p /usr/local/share/lua/5.1/
   - sudo chmod -R 777 /usr/local
 
-script: "luajit test.lua"
+script: "luajit test.lua && sudo bash install.sh"
 
 branches:
   only:
