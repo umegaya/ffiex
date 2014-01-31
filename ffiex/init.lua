@@ -2,14 +2,18 @@ local lcpp = require 'ffiex.lcpp'
 local originalCompileFile = lcpp.compileFile
 local searchPath = {"./", "/usr/local/include/", "/usr/include/"}
 
-lcpp.compileFile = function (filename, predefines)
+lcpp.lastTryPath = false
+lcpp.compileFile = function (filename, predefines, next)
 	for _,path in ipairs(searchPath) do
-		local trypath = (path .. filename)
-		local ok, r = pcall(io.open, trypath, 'r')
-		if ok and r then
-			r:close()
-			filename = trypath
-			break
+		if (not next) or path ~= lcpp.lastTryPath then
+			local trypath = (path .. filename)
+			local ok, r = pcall(io.open, trypath, 'r')
+			if ok and r then
+				r:close()
+				filename = trypath
+				lcpp.lastTryPath = path
+				break
+			end
 		end
 	end
 	-- print('file found:' .. filename)

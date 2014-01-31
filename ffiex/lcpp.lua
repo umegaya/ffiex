@@ -131,6 +131,7 @@ local STRING_LITERAL  = ".*"
 
 -- BNF WORDS
 local _INCLUDE        = "include"
+local _INCLUDE_NEXT   = "include_next"
 local _DEFINE         = "define"
 local _IFDEF          = "ifdef"
 local _IFNDEF         = "ifndef"
@@ -145,6 +146,7 @@ local _PRAGMA         = "pragma"
 
 -- BNF RULES
 local INCLUDE         = STARTL.._INCLUDE..WHITESPACES.."[\"<]("..FILENAME..")[\">]"..OPTSPACES..ENDL
+local INCLUDE_NEXT    = STARTL.._INCLUDE_NEXT..WHITESPACES.."[\"<]("..FILENAME..")[\">]"..OPTSPACES..ENDL
 local DEFINE          = STARTL.._DEFINE
 local IFDEF           = STARTL.._IFDEF..WHITESPACES.."("..IDENTIFIER..")"..OPTSPACES..ENDL
 local IFNDEF          = STARTL.._IFNDEF..WHITESPACES.."("..IDENTIFIER..")"..OPTSPACES..ENDL
@@ -537,6 +539,10 @@ local function processLine(state, line)
 		if filename then
 			return state:includeFile(filename)
 		end
+		local filename = cmd:match(INCLUDE_NEXT)
+                if filename then
+                        return state:includeFile(filename, true)
+                end
 	
 		-- handle #undef ...
 		local key = cmd:match(UNDEF)
@@ -619,8 +625,8 @@ local function doWork(state)
 	return coroutine.wrap(function() _doWork(state) end)
 end
 
-local function includeFile(state, filename)
-	local result, result_state = lcpp.compileFile(filename, state.defines)
+local function includeFile(state, filename, next)
+	local result, result_state = lcpp.compileFile(filename, state.defines, next)
 	-- now, we take the define table of the sub file for further processing
 	state.defines = result_state.defines
 	-- and return the compiled result	
@@ -1182,7 +1188,7 @@ end
 -- @param filename the file to read
 -- @param predefines OPTIONAL a table of predefined variables
 -- @usage out, state = lcpp.compileFile("../odbg/plugin.h", {["MAX_PAH"]=260, ["UNICODE"]=true})
-function lcpp.compileFile(filename, predefines)
+function lcpp.compileFile(filename, predefines, next)
 	if not filename then error("processFile() arg1 has to be a string") end
 	local file = io.open(filename, 'r')
 	if not file then error("file not found: "..filename) end

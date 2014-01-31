@@ -1,4 +1,7 @@
 local ffi = require 'ffiex.init'
+if ffi.os == 'Linux' then
+	ffi.path "/usr/include/linux"
+end
 ffi.cdef[[
 	#include <sys/stat.h>
 	int stat64(const char *path, struct stat *sb);
