@@ -3,7 +3,7 @@ while true do
 	local file = dir:read()
 	if not file then break end
 	file = ('test/' .. file)
-	if file:find('%.lua') then
+	if file:find('%.lua$') then
 		local ok, r = pcall(loadfile, file)
 		if ok and r then
 			print('run test:' .. file)

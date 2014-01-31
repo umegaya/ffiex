@@ -123,7 +123,7 @@ local WHITESPACES     = "%s+"
 local OPTSPACES       = "%s*"
 local IDENTIFIER      = "[_%a][_%w]*"
 local NOIDENTIFIER    = "[^%w_]+"
-local FILENAME        = "[0-9a-zA-Z.-_/\\]+"
+local FILENAME        = "[0-9a-zA-Z.%-_/\\]+"
 local TEXT            = ".+"
 local STRINGIFY       = "#"
 local STRINGIFY_BYTE  = STRINGIFY:byte(1)
@@ -397,7 +397,7 @@ local function screener(input)
 		-- trim and join blocks not starting with "#"
 		local buffer = {}
 		for line in gsplit(input, NEWL) do
-			print('newline:'..line)
+			--print('newline:'..line)
 			line = trim(line)
 			if #line > 0 then
 				if line:byte(1) == CMD_BYTE then 
@@ -433,7 +433,6 @@ local LCPP_TOKENIZE_APPLY_MACRO = {
 	},
 }
 local function apply(state, input)
-	local processed
 	while true do
 		local out = {}
 		local functions = {}
@@ -452,13 +451,19 @@ local function apply(state, input)
 					elseif type(macro) == "number" then
 						repl = tostring(macro)
 					elseif type(macro) == "function" then
-						local decl = input:sub(start):gsub("^[_%a][_%w]%s*%b()", "%1")
-						repl = macro(decl)
-						-- print("d&r:"..decl.."|"..repl)
-						expand = true
-						table.insert(out, repl)
-						table.insert(out, input:sub(end_ + #decl))
-						break
+						local decl,cnt = input:sub(start):gsub("^[_%a][_%w]*%s*%b()", "%1")
+						-- print('matching:'..input.."|"..decl.."|"..cnt)
+						if cnt > 0 then
+							repl = macro(decl)
+							-- print("d&r:"..decl.."|"..repl)
+							expand = true
+							table.insert(out, repl)
+							table.insert(out, input:sub(end_ + #decl))
+							break
+						else
+							-- print(v ..': cannot replace:<'..input..'> read more line')
+							return input,true
+						end
 					end
 					expand = true
 				end
@@ -472,13 +477,11 @@ local function apply(state, input)
 		input = table.concat(out)
 		if not expand then
 			break
-		else
-			processed = true
 		end		
 	end
 
 	-- C liberal string concatenation, process UL, L, LL, U
-	return parseCInteger(concatStringLiteral(input)),processed
+	return parseCInteger(concatStringLiteral(input)),false
 end
 
 -- processes an input line. called from lcpp doWork loop
@@ -578,11 +581,23 @@ local function processLine(state, line)
 		error("unknown directive: "..line)
 	end
 
+	if state.incompleteLine then
+		--print('merge with incompleteLine:'..state.incompleteLine)
+		line = (state.incompleteLine .. line)
+		state.incompleteLine = nil
+	end
+
 	
 	--[[ APPLY MACROS ]]--
-	print(line)
-	line = state:apply(line);
-	print('endprocess:'..line)
+	--print(line)
+	local _line,more = state:apply(line);
+	-- 	print('endprocess:'..line)
+	if more then
+		state.incompleteLine = line
+		return ""
+	else
+		return _line
+	end
 	
 	return line
 end
@@ -895,12 +910,12 @@ local function parseExpr(state, input)
 	local root = node
 	-- first call gets string input. rest uses tokenizer
 	if type(input) == "string" then
-		print('parse:' .. input) 
+		-- print('parse:' .. input) 
 		input = tokenizer(input, LCPP_TOKENIZE_EXPR) 
 	end
 	
 	for type, value in input do
-		print("type:"..type.." value:"..value)
+		-- print("type:"..type.." value:"..value)
 		-- unary operator
 		if type == "NOT" or 
 			type == "BNOT" then
@@ -988,9 +1003,9 @@ local function parseExpr(state, input)
 			setValue(node, parseDefined(state, input))
 		elseif type == "identifier" or type == "FUNCTIONAL_MACRO" then
 			-- print('ident:' .. value)
-			local eval,processed = state:apply(value)
+			local eval = state:apply(value)
 			-- print('apply result ' .. eval .. "|" .. tostring(unprocessed))
-			if processed then
+			if eval ~= value then
 				eval = state:parseExpr(eval)
 				-- print('re-evaluate expr ' .. tostring(eval))
 				setValue(node, eval)
@@ -1030,15 +1045,15 @@ end
 local function replaceArgs(argsstr, repl)
 	local args = {}
 	argsstr = argsstr:sub(2,-2)
-	print('argsstr:'..argsstr)
+	-- print('argsstr:'..argsstr)
 	for k, v, start, end_ in tokenizer(argsstr, LCPP_TOKENIZE_MACRO_ARGS) do
-		print("replaceArgs:" .. k .. "|" .. v)
+		-- print("replaceArgs:" .. k .. "|" .. v)
 		if k == "ARGS" or k == "PARENTHESE" or k == "STRING_LITERAL" then
 			table.insert(args, v)
 		end
 	end
 	local v = repl:gsub("%$(%d+)", function (m) return args[tonumber(m)] or "" end)
-	print("replaceArgs:" .. repl .. "|" .. tostring(#args) .. "|" .. v)
+	-- print("replaceArgs:" .. repl .. "|" .. tostring(#args) .. "|" .. v)
 	return v
 end
 
@@ -1672,14 +1687,22 @@ lcpp.enable = function()
 			end
 			ffi.lcpp_cdef_backup = ffi.cdef
 			ffi.cdef = function(input) 
-				local fn,cnt = input:gsub('#include <(.+%.h)>', '%1')
-				input = ffi.lcpp(input)
-				if cnt > 0 then
-					local f = io.open("./tmp/"..fn, 'w')
-					f:write(input)
-					f:close()
+				if true then
+					return ffi.lcpp_cdef_backup(ffi.lcpp(input)) 
+				else
+					local fn,cnt = input:gsub('#include <(.+%.h)>', '%1')
+					input = ffi.lcpp(input)
+					if cnt > 0 then
+						local f = io.open("./tmp/"..fn, 'w')
+						if f then
+							f:write(input)
+							f:close()
+						else
+							assert(fn:find('/'), 'cannot open: ./tmp/'..fn)
+						end
+					end
+					return ffi.lcpp_cdef_backup(input) 
 				end
-				return ffi.lcpp_cdef_backup(input) 
 			end
 		end
 	end

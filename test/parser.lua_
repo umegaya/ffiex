@@ -1,0 +1,21 @@
+local ffi = require "ffiex.init"
+if ffi.os == "OSX" then
+	local required = {
+		["mpool.h"] = {"db.h"}, -- pgno_t
+		["pcap-bpf.h"] = {"sys/types.h"}, -- u_int
+		["pcap-namedb.h"] = {"sys/types.h", "pcap/bpf.h"}, -- u_char, bpf_u_int32
+		["tclDecls.h"] = {"tcl.h"}, -- EXTERN, CONST84_RETURN
+		["tkDecls.h"] = {"tcl.h"}, -- EXTERN, CONST84_RETURN
+	}
+	ffi.cdef "#define XP_NO_X_HEADERS"
+    ffi.search("/Applications/Xcode.app/Contents/Developer/usr", "stdarg.h", true)
+    ffi.cdef "#include <stdio.h>"
+    ffi.cdef "#include <lber_types.h>"
+    if required[arg[1]] then
+    	for _,hdr in ipairs(required[arg[1]]) do
+    		print('include ' .. hdr .. ' for ' .. arg[1])
+    		ffi.cdef (("#include <%s>"):format(hdr))
+    	end
+    end
+end
+ffi.cdef (("#include <%s>"):format(arg[1]))
