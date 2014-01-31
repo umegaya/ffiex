@@ -14,13 +14,17 @@ if ffi.os == "OSX" then
                 "tkMacOSX.h", -- same as tk.h
                 "ucontext.h", -- The deprecated ucontext routines require _XOPEN_SOURCE to be defined
         }
+elseif ffi.os == "Linux" then
+        blacklist = {
+                "complex.h", -- luajit itself will support for it
+        }
 end
 while true do
         local file = dir:read()
         if not file then break end
 	if not arg[1] or (arg[1] == file) then
 	if file:find('^[^_]+.*%.h$') then
-                print('code:', ('(require "ffiex.init").cdef "#include <%s>"'):format(file))
+                -- print('code:', ('(require "ffiex.init").cdef "#include <%s>"'):format(file))
                 local black
                 if blacklist then
                         for _,fn in ipairs(blacklist) do

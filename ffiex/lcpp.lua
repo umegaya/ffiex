@@ -540,9 +540,9 @@ local function processLine(state, line)
 			return state:includeFile(filename)
 		end
 		local filename = cmd:match(INCLUDE_NEXT)
-                if filename then
-                        return state:includeFile(filename, true)
-                end
+		if filename then
+			return state:includeFile(filename, true)
+		end
 	
 		-- handle #undef ...
 		local key = cmd:match(UNDEF)
@@ -609,7 +609,7 @@ local function processLine(state, line)
 end
 
 local function doWork(state)
-	local function _doWork(state)
+	local function _doWork(state)	
 		if not state:defined(__FILE__) then state:define(__FILE__, "<USER_CHUNK>", true) end
 		local oldIndent = state:getIndent()
 		while true do
@@ -673,11 +673,13 @@ local LCPP_TOKENIZE_MACRO_ARGS = {
 	keywords_order = {
 		"STRING_LITERAL",
 		"PARENTHESE",
+		"FUNCTIONAL",
 		"ARGS",
 
 	},
 	keywords = { 
 		PARENTHESE = "^%s*%b()",
+		FUNCTIONAL = "^".. IDENTIFIER .. "%s*%b()",
 		STRING_LITERAL = '^"[^"]*"',
 		ARGS = "^[^,]+"
 	},
@@ -689,6 +691,9 @@ local LCPP_TOKENIZE_EXPR = {
 		"FUNCTIONAL_MACRO",
 		"BROPEN", 
 		"BRCLOSE", 
+
+		"TENARY_START",
+		"TENARY_MIDDLE",
 		-- binary operators
 		"EQUAL",
 		"NOT_EQUAL",
@@ -722,6 +727,9 @@ local LCPP_TOKENIZE_EXPR = {
 		FUNCTIONAL_MACRO = '^' .. IDENTIFIER .. "%s*%b()",
 		BROPEN = '^[(]', 
 		BRCLOSE = '^[)]', 
+
+		TENARY_START = '^%?',
+		TENARY_MIDDLE = '^%:',
 
 		EQUAL = '^==',
 		NOT_EQUAL = '^!=',
@@ -826,6 +834,8 @@ local combination_order = function (op, unary)
 			return 11
 		elseif op == '||' then
 			return 12
+		elseif op == '?' or op == ':' then
+			return 13
 		else
 			assert(false, 'unsupported operator:' .. op)
 		end
@@ -852,7 +862,7 @@ evaluate = function (node)
 		end
 		return v
 	end
-	-- print(node.op..':'..tostring(node.l.v).."("..type(node.l.v)..")|"..tostring(node.r.v).."("..type(node.r.v)..")")
+	-- print(node.op..':'..tostring(node.l.v or node.l.op).."("..type(node.l.v)..")|"..tostring(node.r.v or node.r.op).."("..type(node.r.v)..")")
 	if node.op == '+' then -- binary operators
 		return (evaluate(node.l) + evaluate(node.r))
 	elseif node.op == '-' then
@@ -940,6 +950,20 @@ local function parseExpr(state, input)
 		if type == "NUMBER_LITERAL" or type == "HEX_LITERAL" or type == "FPNUM_LITERAL" then
 			setValue(node, tonumber(parseCInteger(value)))
 		end
+		-- tenary operator
+		-- tenary has lowest priority, so any other operation can be calculate now.
+		if type == "TENARY_START" then
+			local l = state:parseExpr(input)
+			local r = state:parseExpr(input)
+			if evaluate(root) then
+				return l
+			else
+				return r
+			end
+		end
+		if type == "TENARY_MIDDLE" then
+			break
+		end
 		-- binary operator
 		if type == "EQUAL" or
 			type == "NOT_EQUAL" or
@@ -966,19 +990,29 @@ local function parseExpr(state, input)
 					setUnaryOp(node, value)
 				else -- uop1 uop2 ... uopN operand1 op1 uop(N+1) uop(N+2) ... uop(N+M) operand2 [op2]
 					-- print("operator processing:" .. tostring(node.op) .. "|" .. value .. "|" .. tostring(node.l) .. "|" .. tostring(node.r))
-					if combination_order(node.op) >= combination_order(value) then
-						--print(value..' is stronger or equal')
-						node.r = {
+					local tmp = node
+					while tmp do
+						-- print('compare ' .. value..' and ' .. tmp.op)
+						if combination_order(tmp.op) > combination_order(value) then
+							-- print(value..' is stronger than ' .. tmp.op)
+							break
+						end
+						tmp = tmp.parent
+					end
+					if tmp then
+						node = {
 							op = value,
-							l = node.r,
+							l = tmp.r,
+							parent = tmp
 						}
-						node = node.r
+						tmp.r.parent = node
+						tmp.r = node
 					else
-						-- print(value..' is weaker')
 						node = {
 							op = value,
 							l = root,
 						}
+						root.parent = node
 						root = node
 					end
 				end
@@ -1054,7 +1088,7 @@ local function replaceArgs(argsstr, repl)
 	-- print('argsstr:'..argsstr)
 	for k, v, start, end_ in tokenizer(argsstr, LCPP_TOKENIZE_MACRO_ARGS) do
 		-- print("replaceArgs:" .. k .. "|" .. v)
-		if k == "ARGS" or k == "PARENTHESE" or k == "STRING_LITERAL" then
+		if k == "ARGS" or k == "PARENTHESE" or k == "STRING_LITERAL" or k == "FUNCTIONAL" then
 			table.insert(args, v)
 		end
 	end
@@ -1188,7 +1222,7 @@ end
 -- @param filename the file to read
 -- @param predefines OPTIONAL a table of predefined variables
 -- @usage out, state = lcpp.compileFile("../odbg/plugin.h", {["MAX_PAH"]=260, ["UNICODE"]=true})
-function lcpp.compileFile(filename, predefines, next)
+function lcpp.compileFile(filename, predefines)
 	if not filename then error("processFile() arg1 has to be a string") end
 	local file = io.open(filename, 'r')
 	if not file then error("file not found: "..filename) end
@@ -1286,6 +1320,19 @@ function lcpp.test(suppressMsg)
 			return a + b
 		end
 		assert(macrofunc(1, 2) == 3, "macro arg contains parenthese")
+
+		msg = "tenary operator test"
+		#if (HEX % 2 == 1 ? CUINT : CULONG) == 123456
+			lcpp_test.assertTrue()
+		#else
+			assert(false, msg.."1")
+		#endif
+		#if (OCTET % 2 == 0 ? CUINT : CULONG) == 123456
+			assert(false, msg.."1")
+		#else
+			lcpp_test.assertTrue()
+		#endif
+
 
 
 
@@ -1429,6 +1476,11 @@ function lcpp.test(suppressMsg)
 		#else
 			lcpp_test.assertTrue()
 		#endif
+		#if defined(NOTLEET) || BINARY + 0 >= 10L || !defined(TRUE)
+			assert(false, msg.."22")
+		#else
+			lcpp_test.assertTrue()
+		#endif
 
 
 
@@ -1472,6 +1524,7 @@ function lcpp.test(suppressMsg)
 		#define LCPP_FUNCTION_4(_x)
 
 		assert(check_argnum(LCPP_FUNCTION_4(LCPP_FUNCTION_4_CHILD())) == 0, "functional macro which receives functional macro as argument")
+		assert(check_argnum(LCPP_FUNCTION_4(LCPP_FUNCTION_3(true, true))) == 0, "functional macro which receives functional macro as argument2")
 
 		#define LCPP_FUNCTION_5(x, y) (x) + (x) + (y) + (y)
 		assert(LCPP_FUNCTION_5(10, 20) == 60, "macro argument multiple usage")

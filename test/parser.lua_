@@ -17,5 +17,8 @@ if ffi.os == "OSX" then
     		ffi.cdef (("#include <%s>"):format(hdr))
     	end
     end
+elseif ffi.os == "Linux" then
+    ffi.path "/usr/include/linux"
+    ffi.search("/usr/lib/gcc", "stdarg.h", true)
 end
 ffi.cdef (("#include <%s>"):format(arg[1]))
