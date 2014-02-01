@@ -7,18 +7,16 @@ if ffi.os == "OSX" then
 		["pcap-namedb.h"] = {"sys/types.h", "pcap/bpf.h"}, -- u_char, bpf_u_int32
 		["tclDecls.h"] = {"tcl.h"}, -- EXTERN, CONST84_RETURN
 		["tkDecls.h"] = {"tcl.h"}, -- EXTERN, CONST84_RETURN
+		["lber.h"] = {"lber_types.h"},
+		["ldif.h"] = {"lber_types.h"},
 	}
 	ffi.cdef "#define XP_NO_X_HEADERS"
-	ffi.search("/Applications/Xcode.app/Contents/Developer/usr", "stdarg.h", true)
 	ffi.cdef "#include <stdio.h>"
-	ffi.cdef "#include <lber_types.h>"
 elseif ffi.os == "Linux" then
 	required = {
 		["gcrypt-module.h"] = {"gcrypt.h"}, -- gcry_error_code_t		
 		["kdb.h"] = {"limits.h"}, -- SHRT_MAX
 	}
-	ffi.path "/usr/include/linux"
-	ffi.search("/usr/lib/gcc", "stdarg.h", true)
 end
 if required[arg[1]] then
 	for _,hdr in ipairs(required[arg[1]]) do

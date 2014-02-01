@@ -541,6 +541,7 @@ local function processLine(state, line)
 		end
 		local filename = cmd:match(INCLUDE_NEXT)
 		if filename then
+		print("include_next:"..filename)
 			return state:includeFile(filename, true)
 		end
 	
@@ -595,7 +596,7 @@ local function processLine(state, line)
 
 	
 	--[[ APPLY MACROS ]]--
-	--print(line)
+	-- print(line)
 	local _line,more = state:apply(line);
 	-- 	print('endprocess:'..line)
 	if more then
@@ -636,6 +637,9 @@ end
 -- sets a global define
 local function define(state, key, value, override)
 	local pval = state.defines[key]
+	if key == "__int_least32_t" then
+		print("__int_least32_t defined:" .. debug.traceback())
+	end
 	--print("define:"..key.." type:"..tostring(value).." value:"..tostring(pval))
 	if value and not override and pval and (pval ~= value) then error("already defined: "..key) end
 	state.defines[key] = state:prepareMacro(value)
@@ -862,7 +866,7 @@ evaluate = function (node)
 		end
 		return v
 	end
-	-- print(node.op..':'..tostring(node.l.v or node.l.op).."("..type(node.l.v)..")|"..tostring(node.r.v or node.r.op).."("..type(node.r.v)..")")
+	-- 	print(node.op..':'..tostring(node.l.v or node.l.op).."("..type(node.l.v)..")|"..tostring(node.r.v or node.r.op).."("..type(node.r.v)..")")
 	if node.op == '+' then -- binary operators
 		return (evaluate(node.l) + evaluate(node.r))
 	elseif node.op == '-' then
