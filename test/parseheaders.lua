@@ -17,7 +17,9 @@ if ffi.os == "OSX" then
 elseif ffi.os == "Linux" then
         blacklist = {
                 "complex.h", -- luajit itself will support for it
-        }
+		"cursesapp.h", "cursesf.h", "cursesm.h", "cursesp.h", "cursesw.h", "cursslk.h", -- c++ file
+       		"etip.h", -- c++ file
+	 }
 end
 while true do
         local file = dir:read()
