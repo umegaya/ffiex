@@ -960,12 +960,12 @@ local function parseExpr(state, input)
 	local root = node
 	-- first call gets string input. rest uses tokenizer
 	if type(input) == "string" then
-		-- print('parse:' .. input) 
+		print('parse:' .. input) 
 		input = tokenizer(input, LCPP_TOKENIZE_EXPR) 
 	end
 	
 	for type, value in input do
-		-- print("type:"..type.." value:"..value)
+		print("type:"..type.." value:"..value)
 		-- unary operator
 		if type == "NOT" or 
 			type == "BNOT" then
