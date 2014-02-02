@@ -2,9 +2,9 @@ local lcpp = require 'ffiex.lcpp'
 local originalCompileFile = lcpp.compileFile
 local searchPath = {"./"}
 
-lcpp.compileFile = function (filename, predefines, macro_sources, nxt)
+lcpp.compileFile = function (filename, predefines, macro_sources, nxt, _local)
+	local lastTryPath = predefines.__FILE__:gsub('^(.*/)[^/]+$', '%1')
 	if nxt then
-		local lastTryPath = predefines.__FILE__:gsub('^(.*/)[^/]+$', '%1')
 		local process
 		for _,path in ipairs(searchPath) do
 			if process then
@@ -13,7 +13,6 @@ lcpp.compileFile = function (filename, predefines, macro_sources, nxt)
 				if ok and r then
 					r:close()
 					filename = trypath
-					lcpp.lastTryPath = path
 					break
 				end
 			elseif path == lastTryPath then
@@ -21,14 +20,25 @@ lcpp.compileFile = function (filename, predefines, macro_sources, nxt)
 			end
 		end
 	else
-		for _,path in ipairs(searchPath) do
-			local trypath = (path .. filename)
+		local found 
+		if _local then
+			local trypath = (lastTryPath .. filename)
 			local ok, r = pcall(io.open, trypath, 'r')
 			if ok and r then
 				r:close()
 				filename = trypath
-				lcpp.lastTryPath = path
-				break
+				found = true
+			end
+		end
+		if not found then
+			for _,path in ipairs(searchPath) do
+				local trypath = (path .. filename)
+				local ok, r = pcall(io.open, trypath, 'r')
+				if ok and r then
+					r:close()
+					filename = trypath
+					break
+				end
 			end
 		end
 	end

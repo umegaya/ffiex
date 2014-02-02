@@ -145,7 +145,8 @@ local _ERROR          = "error"
 local _PRAGMA         = "pragma"
 
 -- BNF RULES
-local INCLUDE         = STARTL.._INCLUDE..WHITESPACES.."[\"<]("..FILENAME..")[\">]"..OPTSPACES..ENDL
+local INCLUDE         = STARTL.._INCLUDE..WHITESPACES.."[<]("..FILENAME..")[>]"..OPTSPACES..ENDL
+local LOCAL_INCLUDE   = STARTL.._INCLUDE..WHITESPACES.."[\"]("..FILENAME..")[\"]"..OPTSPACES..ENDL
 local INCLUDE_NEXT    = STARTL.._INCLUDE_NEXT..WHITESPACES.."[\"<]("..FILENAME..")[\">]"..OPTSPACES..ENDL
 local DEFINE          = STARTL.._DEFINE
 local IFDEF           = STARTL.._IFDEF..WHITESPACES.."("..IDENTIFIER..")"..OPTSPACES..ENDL
@@ -333,10 +334,10 @@ local function _tokenizer(str, setup)
 
 	while true do
 		if i > strlen then return 'eof', nil, strlen, strlen end
-		if find(setup.ignore) then	
-			coroutine.yield("ignore", cut(), i1, i2)
-		elseif findKeyword() then
+		if findKeyword() then
 			coroutine.yield(keyword, cut(), i1, i2)
+		elseif find(setup.ignore) then	
+			coroutine.yield("ignore", cut(), i1, i2)
 		elseif find(setup.number) then
 			coroutine.yield('number', tonumber(cut()), i1, i2)
 		elseif find(setup.identifier) then
@@ -448,10 +449,13 @@ local function apply(state, input)
 				if macro then
 					if type(macro)     == "boolean" then
 						repl = ""
+						expand = true
 					elseif type(macro) == "string" then
 						repl = macro
+						expand = (repl ~= v)
 					elseif type(macro) == "number" then
 						repl = tostring(macro)
+						expand = (repl ~= v)
 					elseif type(macro) == "function" then
 						local decl,cnt = input:sub(start):gsub("^[_%a][_%w]*%s*%b()", "%1")
 						-- print('matching:'..input.."|"..decl.."|"..cnt)
@@ -463,11 +467,18 @@ local function apply(state, input)
 							table.insert(out, input:sub(end_ + #decl))
 							break
 						else
-							-- print(v ..': cannot replace:<'..input..'> read more line')
-							return input,true
+							if input:sub(start):find("^[_%a][_%w]*%s*%(") then
+								-- that is part of functional macro declaration.
+								-- print(v ..': cannot replace:<'..input..'> read more line')
+								return input,true
+							else
+								-- on macro name is also used as the symbol of some C declaration
+								-- (e.g. /usr/include/spawn.h, /usr/include/sys/select.h on centos 6.4)
+								-- no need to preprocess.
+								print(v .. ': macro name but used as C declaration in:' .. input)
+							end
 						end
 					end
-					expand = true
 				end
 				table.insert(out, repl)
 			elseif k == "DEFINED" then
@@ -533,18 +544,7 @@ local function processLine(state, line)
 		local errNoTxt = cmd:match(ERROR_NOTEXT)
 		if errMsg then error(errMsg) end
 		if errNoTxt then error("<ERROR MESSAGE NOT SET>") end
-		
-		-- handle #include ...
-		local filename = cmd:match(INCLUDE)
-		if filename then
-			return state:includeFile(filename)
-		end
-		local filename = cmd:match(INCLUDE_NEXT)
-		if filename then
-		print("include_next:"..filename)
-			return state:includeFile(filename, true)
-		end
-	
+			
 		-- handle #undef ...
 		local key = cmd:match(UNDEF)
 		if type(key) == "string" then
@@ -580,6 +580,21 @@ local function processLine(state, line)
 			end
 			
 			return
+		end
+
+		-- handle #include ...
+		local filename = cmd:match(INCLUDE)
+		if filename then
+			return state:includeFile(filename)
+		end
+		local filename = cmd:match(LOCAL_INCLUDE)
+		if filename then
+			return state:includeFile(filename, false, true)
+		end
+		local filename = cmd:match(INCLUDE_NEXT)
+		if filename then
+		print("include_next:"..filename)
+			return state:includeFile(filename, true)
 		end
 		
 		-- ignore, because we dont have any pragma directives yet
@@ -627,8 +642,8 @@ local function doWork(state)
 	return coroutine.wrap(function() _doWork(state) end)
 end
 
-local function includeFile(state, filename, next)
-	local result, result_state = lcpp.compileFile(filename, state.defines, state.macro_sources, next)
+local function includeFile(state, filename, next, _local)
+	local result, result_state = lcpp.compileFile(filename, state.defines, state.macro_sources, next, _local)
 	-- now, we take the define table of the sub file for further processing
 	state.defines = result_state.defines
 	-- and return the compiled result	
@@ -675,8 +690,13 @@ end
 
 local LCPP_TOKENIZE_MACRO = {
 	string = true,
+	keywords_order = {
+		"CONCAT",
+		"SPACE",
+	},
 	keywords = { 
-		CONCAT = "^##",
+		CONCAT = "^%s*##%s*",
+		SPACE = "^%s",
 	},
 }
 local LCPP_TOKENIZE_MACRO_ARGS = {
@@ -686,13 +706,16 @@ local LCPP_TOKENIZE_MACRO_ARGS = {
 		"PARENTHESE",
 		"FUNCTIONAL",
 		"ARGS",
-
+		"SINGLE_CHARACTER_ARGS",
+		"COMMA",
 	},
 	keywords = { 
 		PARENTHESE = "^%s*%b()",
 		FUNCTIONAL = "^".. IDENTIFIER .. "%s*%b()",
 		STRING_LITERAL = '^"[^"]*"',
-		ARGS = "^[^,]+"
+		ARGS = "^[^,%s][^,]*[^,%s]",
+		SINGLE_CHARACTER_ARGS = "^[^,%s]",
+		COMMA = "^,",
 	},
 }
 local LCPP_TOKENIZE_EXPR = {
@@ -1097,10 +1120,19 @@ local function replaceArgs(argsstr, repl)
 	local args = {}
 	argsstr = argsstr:sub(2,-2)
 	-- print('argsstr:'..argsstr)
+	local comma
 	for k, v, start, end_ in tokenizer(argsstr, LCPP_TOKENIZE_MACRO_ARGS) do
 		-- print("replaceArgs:" .. k .. "|" .. v)
-		if k == "ARGS" or k == "PARENTHESE" or k == "STRING_LITERAL" or k == "FUNCTIONAL" then
+		if k == "ARGS" or k == "PARENTHESE" or k == "STRING_LITERAL" or 
+			k == "FUNCTIONAL" or k == "SINGLE_CHARACTER_ARGS" then
 			table.insert(args, v)
+			comma = false
+		elseif k == "COMMA" then
+			if comma then
+				-- continued comma means empty parameter
+				table.insert(args, "")
+			end
+			comma = true
 		end
 	end
 	local v = repl:gsub("%$(%d+)", function (m) return args[tonumber(m)] or "" end)
@@ -1114,16 +1146,22 @@ local function parseFunction(state, input)
 	local concat
 	local name, argsstr, repl = input:match(FUNCMACRO)
 	if not name or not argsstr or not repl then return end
-	repl = state:prepareMacro(repl)
 
 	-- rename args to $1,$2... for later gsub
 	local noargs = 0
 	for argname in argsstr:gmatch(IDENTIFIER) do
 		noargs = noargs + 1
-		repl = repl:gsub("#?"..argname, function (s)
-			return (s:byte(1) == STRINGIFY_BYTE) and ("\"$"..noargs.."\"") or ("$"..noargs)
+		-- avoid matching substring of another identifier (eg. attrib matches __attribute__ and replace it)
+		repl = repl:gsub("(#*)(%s*)("..argname..")([_%w]?)", function (s1, s2, s3, s4)
+			if #s4 <= 0 then
+				return (#s1 == 1) and ("\"$"..noargs.."\"") or (s1..s2.."$"..noargs)
+			else
+				return s1..s2..s3..s4
+			end
 		end)
 	end
+	-- remove concat (after replace matching argument name to $1, $2, ...)
+	repl = repl:gsub("%s*##%s*", "")
 		
 	-- build macro funcion
 	local func = function(input)
@@ -1155,6 +1193,7 @@ function lcpp.init(input, predefines, macro_sources)
 	state.define = define
 	state.undefine = function(state, key)
 		state:define(key, nil)
+		state.macro_sources[key] = nil
 	end
 	state.defined = function(state, key)
 		return state.defines[key] ~= nil
@@ -1234,7 +1273,7 @@ end
 -- @param filename the file to read
 -- @param predefines OPTIONAL a table of predefined variables
 -- @usage out, state = lcpp.compileFile("../odbg/plugin.h", {["MAX_PAH"]=260, ["UNICODE"]=true})
-function lcpp.compileFile(filename, predefines, macro_sources, next)
+function lcpp.compileFile(filename, predefines, macro_sources, next, _local)
 	if not filename then error("processFile() arg1 has to be a string") end
 	local file = io.open(filename, 'r')
 	if not file then error("file not found: "..filename) end
@@ -1303,6 +1342,9 @@ function lcpp.test(suppressMsg)
 		#  define NCURSES_IMPEXP
 		#  define NCURSES_API
 		#  define NCURSES_EXPORT(type) NCURSES_IMPEXP type NCURSES_API
+		#define MACRO_TO_ITSELF MACRO_TO_ITSELF
+		local MACRO_TO_ITSELF = 111
+		assert(MACRO_TO_ITSELF == 111, "can process macro to itself")
 		assert(CLONG == 123456789, "read *L fails")
 		assert(CLONGLONG == 123456789123456789, "read *LL fails")
 		assert(CULONG == 12345678, "read *UL fails")
@@ -1543,6 +1585,16 @@ function lcpp.test(suppressMsg)
 
 		#define LCPP_NOT_FUNCTION (BLUR)
 		assert(LCPP_NOT_FUNCTION == 456, "if space between macro name and argument definition exists, it is regarded as replacement macro")
+
+		#define __CONCAT(x, y, z, w) x ## y ## z (w)
+		local __fncall = function (x) return x + 111 end
+		assert(111 == __CONCAT( __  ,   fnc , all, 0 ), "funcall fails")
+		assert(222 == __CONCAT( __  ,, fncall, 111  ), "funcall fails2")
+		#define __ATTRIB_CALL(x, y, attrib) __attribute__(x, y, attrib)
+		local __attribute__ = function (x, y, attr) 
+			return attr * (x + y)
+		end
+		assert(__ATTRIB_CALL(  1, 2  , 100 ) == 300, "funcall fails3")
 	
 		
 		msg = "#elif test"
