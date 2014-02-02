@@ -1,7 +1,11 @@
 local ffi = require 'ffiex.init'
 
+local pt
 if ffi.os == 'OSX' then
 	ffi.search("/Applications/Xcode.app/Contents/Developer/usr", "stdarg.h", true)
+	pt = ffi.C
+elseif ffi.os == 'Linux' then
+	pt = ffi.load('pthread')
 end
 
 ffi.cdef [[
@@ -13,7 +17,7 @@ ffi.cdef [[
 #include <arpa/inet.h>
 ]]
 
-assert(ffi.C.pthread_join)
+assert(pt.pthread_join)
 assert(ffi.C.malloc)
 assert(ffi.C.connect)
 assert(ffi.C.inet_ntoa)

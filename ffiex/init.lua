@@ -99,7 +99,7 @@ ffi.defs = setmetatable({}, {
 		if type(def) == 'number' then
 			local ok, r = pcall(loadstring, "return " .. def)
 			if ok and r then 
-				rawset(t, k, r())
+				rawset	(t, k, r())
 				return rawget(t, k)
 			end
 		elseif type(def) == 'string' then
@@ -184,7 +184,7 @@ local call_cacher = function (src_name, code, is_tmp, so)
 end
 
 local build = function (name, code)
-	local opts = table.concat((ffi.opts or {"-fPIC"}), " ") .. " -I" .. table.concat(searchPath, " -I")
+	local opts = table.concat((ffi.opts or {"-fPIC"}), " ")
 	local obase,sbase = os.tmpname(),nil
 	local obj = obase .. '.so'
 	local src,is_tmp
@@ -292,6 +292,11 @@ if ffi.os == 'OSX' then
 	ffi.undef({"__BLOCKS__"})
 	-- i don't know the reason but OSX __asm alias not works for luajit symbol search
 	-- and also emurate __has_include_next directive
+	ffi.cdef [[
+		#define __asm(exp)
+		#define __has_include_next(x) 1
+	]]
+elseif ffi.os == 'Linux' then
 	ffi.cdef [[
 		#define __asm(exp)
 		#define __has_include_next(x) 1

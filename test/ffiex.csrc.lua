@@ -14,9 +14,15 @@ local ncall = 0
 ffi.exconf.cacher = function (name, code, file, so)
 	--print('cacher', name, code, file, so)
 	local st = ffi.new('struct stat[1]')
-	local sc = ffi.os == 'OSX' and ffi.defs.SYS_stat64 or ffi.defs.SYS_stat
-	assert(0 == ffi.C.syscall(sc, file, st), "stat call fails")
-	print(file..':modified@'..tostring(st[0].st_size).."|"..tostring(st[0].st_mtimespec.tv_sec))
+	if ffi.os == "OSX" then
+		assert(0 == ffi.C.syscall(ffi.defs.SYS_stat64, file, st), "stat call fails")
+		print(file..':modified@'..tostring(st[0].st_size).."|"..tostring(st[0].st_mtimespec.tv_sec))
+	elseif ffi.os == "Linux" then
+		assert(0 == ffi.C.syscall(ffi.defs.SYS_stat, file, st), "stat call fails")
+		print(file..':modified@'..tostring(st[0].st_size).."|"..tostring(st[0].st_mtim.tv_sec))
+	else
+		assert(false, 'unsupported os:'..ffi.os)
+	end
 	if ncall < 2 then
 		assert(name == 'test')
 		assert(file:find('ffiex.csrc.lua'), "file name wrong:" .. file)
@@ -35,8 +41,8 @@ ffi.exconf.cacher = function (name, code, file, so)
 	ncall = (ncall + 1)
 end
 local lib,ext = ffi.csrc('test', [[
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #define MYID (101)
 #define GEN_ID(x, y) (x + y)
 extern void hello_csrc(int id, char *buffer) { sprintf(buffer, "id:%d", id); }
