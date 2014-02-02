@@ -2,7 +2,7 @@ local lcpp = require 'ffiex.lcpp'
 local originalCompileFile = lcpp.compileFile
 local searchPath = {"./"}
 
-lcpp.compileFile = function (filename, predefines, nxt)
+lcpp.compileFile = function (filename, predefines, macro_sources, nxt)
 	if nxt then
 		local lastTryPath = predefines.__FILE__:gsub('^(.*/)[^/]+$', '%1')
 		local process
@@ -33,7 +33,7 @@ lcpp.compileFile = function (filename, predefines, nxt)
 		end
 	end
 	-- print('file found:' .. filename)
-	return originalCompileFile(filename, predefines)
+	return originalCompileFile(filename, predefines, macro_sources, nxt)
 end
 local ffi = require 'ffi'
 ffi.exconf = {}
@@ -74,6 +74,15 @@ ffi.undef = function (defs)
 		ffi.lcpp_defs[def] = nil
 	end
 end
+local function toluaFunc(macro_source)
+	return function (...)
+		local args = {...}
+		local src = "return " .. macro_source:gsub("%$(%d+)", function (m) return args[tonumber(m)] end)
+		local ok, r = pcall(loadstring, src)
+		if not ok then error(r) end
+		return r()
+	end
+end
 ffi.defs = setmetatable({}, {
 	__index = function (t, k)
 		local def = ffi.lcpp_defs[k]
@@ -84,7 +93,9 @@ ffi.defs = setmetatable({}, {
 				return  t[k]
 			end
 		elseif type(def) == 'function' then
-			error("currently, functional macro not worked as it should:" .. k)
+			def = ffi.lcpp_macro_sources[k]
+			if not def then return nil end
+			def = toluaFunc(def)
 		end
 		t[k] = def
 		return def
@@ -232,7 +243,7 @@ end
 
 -- add compiler built in header search path
 local add_builtin_paths = function ()
-	p = io.popen('echo | gcc -xc -v - 2>&1 | cat')
+	local p = io.popen('echo | gcc -xc -v - 2>&1 | cat')
 	local search_path_start
 	while true do
 		-- TODO : that is not stable way to get search paths.
@@ -256,7 +267,7 @@ add_builtin_defs()
 add_builtin_paths()
 
 for _,path in ipairs(searchPath) do
---	print('searchPath:'..path)
+-- print('searchPath:'..path)
 end
 
 -- os dependent tweak

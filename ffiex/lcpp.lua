@@ -570,9 +570,10 @@ local function processLine(state, line)
 			else
 	
 			-- read functional macros
-			macroname, replacement = state:parseFunction(define)
+			macroname, replacement, source = state:parseFunction(define)
 			if macroname and replacement then
-				state:define(macroname, replacement)
+				-- add original text for definition to check identify
+				state:define(macroname, replacement, false, source)
 			end
 
 			end
@@ -627,7 +628,7 @@ local function doWork(state)
 end
 
 local function includeFile(state, filename, next)
-	local result, result_state = lcpp.compileFile(filename, state.defines, next)
+	local result, result_state = lcpp.compileFile(filename, state.defines, state.macro_sources, next)
 	-- now, we take the define table of the sub file for further processing
 	state.defines = result_state.defines
 	-- and return the compiled result	
@@ -635,13 +636,19 @@ local function includeFile(state, filename, next)
 end
 
 -- sets a global define
-local function define(state, key, value, override)
-	local pval = state.defines[key]
-	if key == "__int_least32_t" then
-		print("__int_least32_t defined:" .. debug.traceback())
-	end
+local function define(state, key, value, override, macro_source)
 	--print("define:"..key.." type:"..tostring(value).." value:"..tostring(pval))
-	if value and not override and pval and (pval ~= value) then error("already defined: "..key) end
+	if value and not override then
+		if type(value) == 'function' then
+			assert(macro_source, "macro source should specify to check identity")
+			local pval = state.macro_sources[key]
+			if pval and (pval ~= macro_source) then error("already defined: "..key) end
+			state.macro_sources[key] = macro_source
+		else
+			local pval = state.defines[key]
+			if pval and (pval ~= value) then error("already defined: "..key) end
+		end
+	end
 	state.defines[key] = state:prepareMacro(value)
 end
 
@@ -1109,7 +1116,7 @@ local function parseFunction(state, input)
 	if not name or not argsstr or not repl then return end
 	repl = state:prepareMacro(repl)
 
-	-- rename args to %1,%2... for later gsub
+	-- rename args to $1,$2... for later gsub
 	local noargs = 0
 	for argname in argsstr:gmatch(IDENTIFIER) do
 		noargs = noargs + 1
@@ -1125,7 +1132,7 @@ local function parseFunction(state, input)
 		end)
 	end
 	
-	return name, func
+	return name, func, repl
 end
 
 
@@ -1134,7 +1141,7 @@ end
 -- ------------
 
 --- initialies a lcpp state. not needed manually. handy for testing
-function lcpp.init(input, predefines)
+function lcpp.init(input, predefines, macro_sources)
 	-- create sate var
 	local state     = {}              -- init the state object
 	state.defines   = {}              -- the table of known defines and replacements
@@ -1142,6 +1149,7 @@ function lcpp.init(input, predefines)
 	state.lineno    = 0               -- the current line number
 	state.stack     = {}              -- stores wether the current stack level is to be included
 	state.once      = {}              -- stack level was once true (first if that evals to true)
+	state.macro_sources = macro_sources or {} -- original replacement text for functional macro 
 	
 	-- funcs
 	state.define = define
@@ -1211,8 +1219,8 @@ end
 -- @param predefines OPTIONAL a table of predefined variables
 -- @usage lcpp.compile("#define bar 0x1337\nstatic const int foo = bar;")
 -- @usage lcpp.compile("#define bar 0x1337\nstatic const int foo = bar;", {["bar"] = "0x1338"})
-function lcpp.compile(code, predefines)
-	local state = lcpp.init(code, predefines)
+function lcpp.compile(code, predefines, macro_sources)
+	local state = lcpp.init(code, predefines, macro_sources)
 	local buf = {}
 	for output in state:doWork() do
 		table.insert(buf, output)
@@ -1226,14 +1234,14 @@ end
 -- @param filename the file to read
 -- @param predefines OPTIONAL a table of predefined variables
 -- @usage out, state = lcpp.compileFile("../odbg/plugin.h", {["MAX_PAH"]=260, ["UNICODE"]=true})
-function lcpp.compileFile(filename, predefines)
+function lcpp.compileFile(filename, predefines, macro_sources, next)
 	if not filename then error("processFile() arg1 has to be a string") end
 	local file = io.open(filename, 'r')
 	if not file then error("file not found: "..filename) end
 	local code = file:read('*a')
 	predefines = predefines or {}
 	predefines[__FILE__] = filename
-	return lcpp.compile(code, predefines)
+	return lcpp.compile(code, predefines, macro_sources)
 end
 
 
@@ -1623,6 +1631,8 @@ function lcpp.test(suppressMsg)
 		msg = "same macro definition which has exactly same value allows. (checked with gcc 4.4.7 __WORDSIZE)"
 		#define DUP_MACRO_DEF (111)
 		#define DUP_MACRO_DEF (111)
+		#define DUP_FUNC_MACRO(x, y) x + y
+		#define DUP_FUNC_MACRO(x, y) x + y
 
 
 		msg = "check #if conditional check"
@@ -1744,8 +1754,9 @@ lcpp.enable = function()
 		if not ffi.lcpp_cdef_backup then
 			if not ffi.lcpp_defs then ffi.lcpp_defs = {} end -- defs are stored and reused
 			ffi.lcpp = function(input) 
-				local output, state = lcpp.compile(input, ffi.lcpp_defs)
+				local output, state = lcpp.compile(input, ffi.lcpp_defs, ffi.lcpp_macro_sources)
 				ffi.lcpp_defs = state.defines
+				ffi.lcpp_macro_sources = state.macro_sources
 				return output	
 			end
 			ffi.lcpp_cdef_backup = ffi.cdef
