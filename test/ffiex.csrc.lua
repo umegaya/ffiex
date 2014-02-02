@@ -4,6 +4,8 @@ if ffi.os == 'Linux' then
 end
 ffi.cdef[[
 	#include <sys/stat.h>
+	#include <unistd.h>
+	#include <sys/syscall.h>
 	int stat64(const char *path, struct stat *sb);
 ]]
 ffi.cdef "#include <time.h>"
@@ -12,18 +14,15 @@ local ncall = 0
 ffi.exconf.cacher = function (name, code, file, so)
 	--print('cacher', name, code, file, so)
 	local st = ffi.new('struct stat[1]')
-	if ffi.os == 'OSX' then
-		assert(0 == ffi.C.stat64(file, st), "stat call fails")
-	else
-		assert(0 == ffi.C.stat(file, st), "stat call fails")
-	end
+	local sc = ffi.os == 'OSX' and ffi.defs.SYS_stat64 or ffi.defs.SYS_stat
+	assert(0 == ffi.C.syscall(sc, file, st), "stat call fails")
 	print(file..':modified@'..tostring(st[0].st_size).."|"..tostring(st[0].st_mtimespec.tv_sec))
 	if ncall < 2 then
 		assert(name == 'test')
 		assert(file:find('ffiex.csrc.lua'), "file name wrong:" .. file)
 	elseif ncall < 4 then
 		assert(name == './test/foo.c')
-		assert(file:find('test/foo.c'), "file name wrong:" .. file)
+		assert(file:find('test/foo.c'), "filez name wrong:" .. file)
 	elseif ncall < 6 then
 		assert(name == 'test2')		
 		assert(file:find('ffiex.csrc.lua'), "file name wrong:" .. file)
@@ -49,6 +48,7 @@ static inline void not_export(int id) {
 
 local msg = ffi.new("char[256]")
 lib.hello_csrc(ffi.defs.MYID, msg)
+print(ffi.defs.MYID)
 assert("id:101" == ffi.string(msg));
 lib.hello_csrc(ffi.defs.GEN_ID(10, 20), msg)
 assert("id:30" == ffi.string(msg));

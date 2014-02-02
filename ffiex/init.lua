@@ -96,18 +96,23 @@ end
 ffi.defs = setmetatable({}, {
 	__index = function (t, k)
 		local def = ffi.lcpp_defs[k]
-		if type(def) == 'string' then
+		if type(def) == 'number' then
 			local ok, r = pcall(loadstring, "return " .. def)
 			if ok and r then 
-				t[k] = r()
-				return  t[k]
+				rawset(t, k, r())
+				return rawget(t, k)
 			end
+		elseif type(def) == 'string' then
+			local state = lcpp.init('', ffi.lcpp_defs, ffi.lcpp_macro_sources)
+			local expr = state:parseExpr(def)
+			rawset(t, k, expr)
+			return rawget(t, k)
 		elseif type(def) == 'function' then
 			def = ffi.lcpp_macro_sources[k]
 			if not def then return nil end
 			def = toluaFunc(def)
 		end
-		t[k] = def
+		rawset(t, k, def)
 		return def
 	end
 })

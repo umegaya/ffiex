@@ -247,11 +247,11 @@ local function parseCInteger(input)
 		gsub('0b(%d+)[UL]*', function (m)
 			return tonumber(m, 2)
 		end):
-		gsub('(0%d+)[UL]*', function (m)
-			return tonumber(m, 8)
-		end):
 		gsub('([1-9]%d*)[UL]*', function (m)
 			return tonumber(m, 10)
+		end):
+		gsub('([^%d])(0%d+)[UL]*', function (m1, m2)
+			return m1 .. tonumber(m2, 8)
 		end)
 	return str
 end
