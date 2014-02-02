@@ -19,6 +19,7 @@ elseif ffi.os == "Linux" then
                 "complex.h", -- luajit itself will support for it
 		"cursesapp.h", "cursesf.h", "cursesm.h", "cursesp.h", "cursesw.h", "cursslk.h", -- c++ file
        		"etip.h", -- c++ file
+            "link.h", -- missing Elf__ELF_NATIVE_CLASS_Addr
 	 }
 end
 while true do

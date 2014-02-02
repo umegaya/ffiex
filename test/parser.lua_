@@ -1,6 +1,10 @@
 local ffi = require "ffiex.init"
 local required
+local expath 
 if ffi.os == "OSX" then
+	expath = {
+
+	}
 	required = {
 		["mpool.h"] = {"db.h"}, -- pgno_t
 		["pcap-bpf.h"] = {"sys/types.h"}, -- u_int
@@ -13,15 +17,27 @@ if ffi.os == "OSX" then
 	ffi.cdef "#define XP_NO_X_HEADERS"
 	ffi.cdef "#include <stdio.h>"
 elseif ffi.os == "Linux" then
+	expath = {
+		["xf86drm.h"] = {"/usr/include/drm"}, -- drm.h	
+		["xf86drmMode.h"] = {"/usr/include/drm"}, -- drm.h	
+	}
 	required = {
 		["gcrypt-module.h"] = {"gcrypt.h"}, -- gcry_error_code_t		
 		["kdb.h"] = {"limits.h"}, -- SHRT_MAX
+		["term_entry.h"] = {"stdio.h"}, -- FILE
 	}
+	ffi.cdef "#include <sys/types.h>"
 end
 if required[arg[1]] then
 	for _,hdr in ipairs(required[arg[1]]) do
 		print('include ' .. hdr .. ' for ' .. arg[1])
 		ffi.cdef (("#include <%s>"):format(hdr))
+	end
+end
+if expath[arg[1]] then
+	for _,p in ipairs(expath[arg[1]]) do
+		print('add path ' .. p .. ' for ' .. arg[1])
+		ffi.path(p)
 	end
 end
 ffi.cdef (("#include <%s>"):format(arg[1]))
