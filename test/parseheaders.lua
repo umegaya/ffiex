@@ -23,6 +23,7 @@ elseif ffi.os == "Linux" then
 	"dialog.h", "dlg_colors.h", "dlg_keys.h", -- refer ncurses/ncurses.h even if its not installed (dlg_config.h wrongly says it is exists)
 	}
 end
+arg[1] = "driver.h"
 while true do
     local file = dir:read()
     if not file then break end
