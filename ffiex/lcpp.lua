@@ -252,6 +252,9 @@ local function parseCInteger(input)
 		end):
 		gsub('([^%d])(0%d+)[UL]*', function (m1, m2)
 			return m1 .. tonumber(m2, 8)
+		end):
+		gsub("L'(.*)'", function (m)
+			return string.byte(loadstring("return \"" .. m .. "\"")())
 		end)
 	return str
 end
@@ -614,7 +617,7 @@ local function processLine(state, line)
 	--[[ APPLY MACROS ]]--
 	-- print(line)
 	local _line,more = state:apply(line);
-	-- 	print('endprocess:'..line)
+	-- print('endprocess:'.._line)
 	if more then
 		state.incompleteLine = line
 		return ""
@@ -752,6 +755,7 @@ local LCPP_TOKENIZE_EXPR = {
 		"BNOT", 
 		-- literal
 		"STRING_LITERAL",
+		"CHAR_LITERAL",
 		"HEX_LITERAL",
 		"FPNUM_LITERAL",
 		"NUMBER_LITERAL",
@@ -787,7 +791,8 @@ local LCPP_TOKENIZE_EXPR = {
 		NOT = '^!', 
 		BNOT = '^~',
 
-		STRING_LITERAL = '^"[^"]*"',
+		STRING_LITERAL = '^L?"[^"]*"',
+		CHAR_LITERAL = "^L?'.*'",
 		HEX_LITERAL = '^[%+%-]?0?x[a-fA-F%d]+[UL]*',
 		FPNUM_LITERAL = '^[%+%-]?%d+[%.]?%d*e[%+%-]%d*',
 		NUMBER_LITERAL = '^[%+%-]?0?b?%d+[%.]?%d*[UL]*',
@@ -960,12 +965,12 @@ local function parseExpr(state, input)
 	local root = node
 	-- first call gets string input. rest uses tokenizer
 	if type(input) == "string" then
-		print('parse:' .. input) 
+		-- print('parse:' .. input) 
 		input = tokenizer(input, LCPP_TOKENIZE_EXPR) 
 	end
 	
 	for type, value in input do
-		print("type:"..type.." value:"..value)
+		-- print("type:"..type.." value:"..value)
 		-- unary operator
 		if type == "NOT" or 
 			type == "BNOT" then
@@ -979,9 +984,9 @@ local function parseExpr(state, input)
 			break
 		end
 		if type == "STRING_LITERAL" then
-			setValue(node, value:sub(2,-2))
+			setValue(node, value:sub(value[1] == 'L' and 3 or 2,-2))
 		end
-		if type == "NUMBER_LITERAL" or type == "HEX_LITERAL" or type == "FPNUM_LITERAL" then
+		if type == "NUMBER_LITERAL" or type == "HEX_LITERAL" or type == "FPNUM_LITERAL" or type == "CHAR_LITERAL" then
 			setValue(node, tonumber(parseCInteger(value)))
 		end
 		-- tenary operator
@@ -1339,12 +1344,14 @@ function lcpp.test(suppressMsg)
 		#define NON_OCTET 75
 		#define HEX 0xffffU
 		#define __P(x) x
+		#define WCHAR_ZERO L'\0'
 		#  define NCURSES_IMPEXP
 		#  define NCURSES_API
 		#  define NCURSES_EXPORT(type) NCURSES_IMPEXP type NCURSES_API
 		#define MACRO_TO_ITSELF MACRO_TO_ITSELF
 		local MACRO_TO_ITSELF = 111
 		assert(MACRO_TO_ITSELF == 111, "can process macro to itself")
+		assert(WCHAR_ZERO == 0, "wchar evaluate fails")
 		assert(CLONG == 123456789, "read *L fails")
 		assert(CLONGLONG == 123456789123456789, "read *LL fails")
 		assert(CULONG == 12345678, "read *UL fails")
