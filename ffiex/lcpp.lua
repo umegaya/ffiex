@@ -505,7 +505,7 @@ local function processLine(state, line)
 	if not line or #line == 0 then return line end
 	local cmd = nil 
 	if line:byte(1) == CMD_BYTE then cmd = line:sub(2) end
-	print("process:"..line)--.."|"..tostring(state:skip()))
+	-- print("process:"..line)--.."|"..tostring(state:skip()))
 
 	--[[ IF/THEN/ELSE STRUCTURAL BLOCKS ]]--
 	if cmd then

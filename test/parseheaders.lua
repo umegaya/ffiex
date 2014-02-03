@@ -20,6 +20,7 @@ elseif ffi.os == "Linux" then
 		"cursesapp.h", "cursesf.h", "cursesm.h", "cursesp.h", "cursesw.h", "cursslk.h", -- c++ file
        	"autosprintf.h", "etip.h", -- c++ file
         "link.h", -- missing Elf__ELF_NATIVE_CLASS_Addr
+	"dialog.h", "dlg_colors.h", "dlg_keys.h", -- refer ncurses/ncurses.h even if its not installed (dlg_config.h wrongly says it is exists)
 	}
 end
 while true do
