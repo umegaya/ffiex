@@ -11,7 +11,7 @@ before_script:
   - sudo mkdir -p /usr/local/share/lua/5.1/
   - sudo chmod -R 777 /usr/local
 
-script: "cat /usr/include/driver.h && sudo bash travis_install.sh && luajit test.lua && sudo bash install.sh"
+script: "ls -al /usr/lib/erlang/lib/erl_interface-3.7.5/include && sudo bash travis_install.sh && luajit test.lua && sudo bash install.sh"
 
 branches:
   only:

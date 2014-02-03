@@ -1823,7 +1823,7 @@ lcpp.enable = function()
 				if true then
 					return ffi.lcpp_cdef_backup(ffi.lcpp(input)) 
 				else
-					local fn,cnt = input:gsub('#include <(.+%.h)>', '%1')
+					local fn,cnt = input:gsub('#include ["<].-([^/]+%.h)[">]', '%1')
 					input = ffi.lcpp(input)
 					if cnt > 0 then
 						local f = io.open("./tmp/"..fn, 'w')

@@ -25,6 +25,12 @@ elseif ffi.os == "Linux" then
 		["gcrypt-module.h"] = {"gcrypt.h"}, -- gcry_error_code_t		
 		["kdb.h"] = {"limits.h"}, -- SHRT_MAX
 		["term_entry.h"] = {"stdio.h"}, -- FILE
+		["evrpc.h"] = {"sys/queue.h"}, -- TAILQ_ENTRY
+		["jpegint.h"] = {"stdio.h", "jpeglib.h"}, -- JMETHOD
+		["jpeglib.h"] = {"stdio.h"}, -- FILE
+		["lber.h"] = {"stdio.h", "lber_types.h"}, -- FILE, ber_len_t
+                ["ldif.h"] = {"stdio.h", "lber_types.h"}, -- FILE, ber_len_t
+		["pngconf.h"] = {"zlib.h"}, -- charf, z_stream
 	}
 	ffi.cdef "#include <sys/types.h>"
 end

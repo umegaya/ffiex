@@ -20,10 +20,16 @@ elseif ffi.os == "Linux" then
 		"cursesapp.h", "cursesf.h", "cursesm.h", "cursesp.h", "cursesw.h", "cursslk.h", -- c++ file
        	"autosprintf.h", "etip.h", -- c++ file
         "link.h", -- missing Elf__ELF_NATIVE_CLASS_Addr
-	"dialog.h", "dlg_colors.h", "dlg_keys.h", -- refer ncurses/ncurses.h even if its not installed (dlg_config.h wrongly says it is exists)
+	    "dialog.h", "dlg_colors.h", "dlg_keys.h", -- refer ncurses/ncurses.h even if its not installed (dlg_config.h wrongly says it is exists)
+        "driver.h", -- symbolic link to /usr/lib/erlang/user/include/driver.h but only /usr/lib/erlang/user/include/erl_driver.h exists.
+        "erl_nif_api_funcs.h", --  This file should not be included directly (error in header itself)
+        "FlexLexer.h", -- c++ header
+        "ft2build.h", -- try to include <freetype/config/fthreader.h> but only have freetype2 directory under /usr/include
+	"pcre_stringpiece.h", "pcre_scanner.h", "pcrecpp.h", "pcrecpparg.h", -- c++ header
+	"png.h", -- png_structppng_ptr not exist. I think that is typo of "png_structp png_ptr"
+	"turbojpeg.h", -- luajit cdef cannot process static const int []
 	}
 end
-arg[1] = "driver.h"
 while true do
     local file = dir:read()
     if not file then break end
@@ -40,6 +46,9 @@ while true do
             end
             if not black then
                 print('try parse:' .. file)
+                if file == 'driver.h' then
+                    print(io.popen('sudo cat /usr/include/driver.h'):read('*a'))
+                end
                 local ok, r = pcall(os.execute, ('luajit test/parser.lua_ %s'):format(file))
                 --local ok, r = pcall(loadstring, ('(require "ffiex.init").cdef "#include <%s>"'):format(file))
                 if ok and r == 0 then
