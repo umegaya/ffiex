@@ -1,7 +1,9 @@
 local ffi = require 'ffiex.init'
 if ffi.os == 'Linux' then
-	ffi.path "/usr/include/linux"
+	ffi.path("/usr/include/linux", true)
 end
+-- add local path
+ffi.path "./test/myheaders"
 ffi.cdef[[
 	#include <sys/stat.h>
 	#include <unistd.h>
@@ -43,6 +45,7 @@ end
 local lib,ext = ffi.csrc('test', [[
 #include <stdio.h>
 #include <stdlib.h>
+#include "my.h"
 #define MYID (101)
 #define GEN_ID(x, y) (x + y)
 extern void hello_csrc(int id, char *buffer) { sprintf(buffer, "id:%d", id); }
@@ -58,6 +61,8 @@ print(ffi.defs.MYID)
 assert("id:101" == ffi.string(msg));
 lib.hello_csrc(ffi.defs.GEN_ID(10, 20), msg)
 assert("id:30" == ffi.string(msg));
+lib.hello_csrc(ffi.defs.MY_MACRO(2), msg)
+assert("id:246" == ffi.string(msg));
 assert(lib.export);
 local ok, r = pcall(function ()
 	return lib.not_export(100)

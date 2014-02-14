@@ -13,8 +13,39 @@ if ffi.os == "OSX" then
 		["tkDecls.h"] = {"tcl.h"}, -- EXTERN, CONST84_RETURN
 		["lber.h"] = {"lber_types.h"},
 		["ldif.h"] = {"lber_types.h"},
+		["sys/_select.h"] = {"sys/_types/_fd_def.h"},
+		["sys/acct.h"] = {"i386/types.h", "sys/_types/_uid_t.h", "sys/_types/_gid_t.h", "sys/_types/_dev_t.h"},
+		["sys/acl.h"] = {"i386/types.h", "sys/_types/_uid_t.h", "sys/_types/_gid_t.h", "sys/_types/_dev_t.h"},
+		["sys/gmon.h"] = {"sys/types.h"}, -- u_short
+		["sys/kauth.h"] = {"sys/types.h"}, -- u_int8_t
+		["sys/kern_control.h"] = {"sys/types.h"}, -- u_int32_t
+		["sys/mbuf.h"] = {"sys/types.h"}, -- u_int32_t
+		["sys/pipe.h"] = {"sys/types.h"}, -- u_int32_t
+		["sys/lctx.h"] = {"sys/_types/_pid_t.h"}, -- pid_t
+		["sys/lockf.h"] = {"sys/types.h"}, -- caddr_t
+		["sys/posix_sem.h"] = {"sys/types.h", "sys/signal.h", "sys/time.h"}, -- sigset_t, struct timeval
+		["sys/posix_shm.h"] = {"sys/types.h", "sys/signal.h", "sys/time.h"}, -- sigset_t, struct timeval
+		["sys/proc.h"] = {"sys/types.h", "sys/signal.h", "sys/time.h"}, -- sigset_t, struct timeval
+		["sys/ptrace.h"] = {"sys/types.h"}, -- pid_t, caddr_t
+		["sys/quota.h"] = {"sys/types.h"}, -- u_int32_t
+		["sys/random.h"] = {"sys/types.h"}, -- u_int32_t
+		["sys/resourcevar.h"] = {"sys/types.h", "sys/resource.h"}, -- caddr_t, struct rusage
+		["sys/socketvar.h"] = {"sys/types.h"}, -- u_quad_t
+		["sys/unpcb.h"] = {"sys/types.h", "sys/socketvar.h"}, -- so_gen_t
+		["sys/vm.h"] = {"sys/types.h"}, -- caddr_t
+		["sys/vstat.h"] = {"sys/mount.h"}, -- fsid_t
+		["netinet/bootp.h"] = {"netinet/ip.h", "netinet/ip_icmp.h", "netinet/udp.h"}, -- struct udphdr, struct ip, ICMP_MAXTYPE
+		["netinet/icmp_var.h"] = {"netinet/ip.h", "netinet/ip_icmp.h"}, -- ICMP_MAXTYPE
+		["netinet/in_pcb.h"] = {"netinet/ip.h", "netinet/ip_icmp.h", "sys/socketvar.h"}, -- ICMP_MAXTYPE, xsocket
+		["netinet/in_var.h"] = {"net/if.h"}, -- IFNAMSIZ
+		["netinet/ip_icmp.h"] = {"netinet/ip.h"}, -- n_short
+		["netinet/tcp_var.h"] = {"sys/socketvar.h", "netinet/tcp.h"}, -- xsocket, tcp_seq
+		["netinet/tcpip.h"] = {"net/if.h", "netinet/ip_var.h", "netinet/tcp.h"}, -- struct ipovly, struct tcphdr
+		["netinet/udp_var.h"] = {"net/if.h", "netinet/ip_var.h", "netinet/udp.h"}, -- struct ipovly, struct udphdr
 	}
 	ffi.cdef "#define XP_NO_X_HEADERS"
+	ffi.cdef "#include <sys/types.h>"
+	ffi.cdef "#include <netinet/in.h>"
 	ffi.cdef "#include <stdio.h>"
 elseif ffi.os == "Linux" then
 	expath = {
@@ -29,7 +60,7 @@ elseif ffi.os == "Linux" then
 		["jpegint.h"] = {"stdio.h", "jpeglib.h"}, -- JMETHOD
 		["jpeglib.h"] = {"stdio.h"}, -- FILE
 		["lber.h"] = {"stdio.h", "lber_types.h"}, -- FILE, ber_len_t
-                ["ldif.h"] = {"stdio.h", "lber_types.h"}, -- FILE, ber_len_t
+		["ldif.h"] = {"stdio.h", "lber_types.h"}, -- FILE, ber_len_t
 		["pngconf.h"] = {"zlib.h"}, -- charf, z_stream
 	}
 	ffi.cdef "#include <sys/types.h>"

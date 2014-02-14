@@ -1,6 +1,7 @@
 local lcpp = require 'ffiex.lcpp'
 local originalCompileFile = lcpp.compileFile
 local searchPath = {"./"}
+local localSearchPath = {}
 
 lcpp.compileFile = function (filename, predefines, macro_sources, nxt, _local)
 	local lastTryPath = predefines.__FILE__:gsub('^(.*/)[^/]+$', '%1')
@@ -47,11 +48,15 @@ lcpp.compileFile = function (filename, predefines, macro_sources, nxt, _local)
 end
 local ffi = require 'ffi'
 ffi.exconf = {}
-ffi.path = function (path)
+ffi.path = function (path, system)
 	if path[#path] ~= '/' then
 		path = (path .. '/')
 	end
 	table.insert(searchPath, path)
+	if not system then
+		print("add localSerchPath:" .. path)
+		table.insert(localSearchPath, path)
+	end
 end
 ffi.search = function (path, file, add)
 	local p = io.popen(('find %s -name %s'):format(path, file), 'r')
@@ -185,6 +190,10 @@ end
 
 local build = function (name, code)
 	local opts = table.concat((ffi.opts or {"-fPIC"}), " ")
+	if #localSearchPath > 0 then
+		opts = (opts .. " -I" .. table.concat(localSearchPath, " -I"))
+	end
+
 	local obase,sbase = os.tmpname(),nil
 	local obj = obase .. '.so'
 	local src,is_tmp
@@ -208,6 +217,7 @@ local build = function (name, code)
 	-- generate cdefs from source code
 	generate_cdefs(code)
 	-- compile .so
+	print(('gcc -shared -o %s %s %s'):format(obj, opts, src))
 	local ok, r = pcall(os.execute, ('gcc -shared -o %s %s %s'):format(obj, opts, src))
 	local ra, rb
 	if ok then
@@ -261,13 +271,15 @@ local add_builtin_paths = function ()
 	local p = io.popen('echo | gcc -xc -v - 2>&1 | cat')
 	local search_path_start
 	while true do
-		-- TODO : that is not stable way to get search paths.
+		-- TODO : parsing unstructured compiler output.
+		-- that is not stable way to get search paths.
 		-- but I cannot find better way than this.
 		local line = p:read('*l')
 		if not line then break end
 		if search_path_start then
 			local tmp,cnt = line:gsub('^%s+(.*)', '%1')
 			if cnt > 0 then
+				-- remove unnecessary output of osx clang.
 				ffi.path(tmp:gsub(' %(framework directory%)', ''))
 			else
 				break
@@ -288,10 +300,11 @@ end
 -- os dependent tweak
 if ffi.os == 'OSX' then
 	-- luajit cannot parse objective-C code correctly
-	-- e.g.  int      atexit_b(void (^)(void)) ; ^!!
+	-- e.g.  int      atexit_b(void (^)(void)) ;
 	ffi.undef({"__BLOCKS__"})
 	-- i don't know the reason but OSX __asm alias not works for luajit symbol search
 	-- and also emurate __has_include_next directive
+	-- TODO : implement __has_include_next in correct way
 	ffi.cdef [[
 		#define __asm(exp)
 		#define __has_include_next(x) 1

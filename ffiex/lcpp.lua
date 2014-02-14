@@ -142,6 +142,7 @@ local _ELSE           = "else"
 local _ELIF           = "elif"
 local _NOT            = "!"
 local _ERROR          = "error"
+local _WARNING		  = "warning"
 local _PRAGMA         = "pragma"
 
 -- BNF RULES
@@ -158,6 +159,7 @@ local ELSE            = STARTL.._ELSE..OPTSPACES..ENDL
 local ELIF            = STARTL.._ELIF..WHITESPACES.."(.*)"..ENDL
 local ELSEIF          = STARTL.._ELSE..WHITESPACES.._IF..WHITESPACES.."(.*)"..ENDL
 local ERROR           = STARTL.._ERROR..WHITESPACES.."("..TEXT..")"..OPTSPACES..ENDL
+local WARNING         = STARTL.._WARNING..WHITESPACES.."("..TEXT..")"..OPTSPACES..ENDL
 local ERROR_NOTEXT    = STARTL.._ERROR..OPTSPACES..ENDL	--> not required when we have POSIX regex
 local PRAGMA          = STARTL.._PRAGMA
 
@@ -236,27 +238,6 @@ end
 local function concatStringLiteral(input)
 	-- screener does remove multiline definition, so just check ".*"%s*".*" pattern
 	return input:gsub("\"("..STRING_LITERAL..")\""..OPTSPACES.."\"("..STRING_LITERAL..")\"", "\"%1%2\"")
-end
-
--- C style number parse (UL, LL, L) and (octet, hex, binary)
-local function parseCInteger(input)
-	local str = input:
-		gsub('0x([a-fA-F%d]+)[UL]*', function (m)
-			return tonumber(m, 16)
-		end):
-		gsub('0b(%d+)[UL]*', function (m)
-			return tonumber(m, 2)
-		end):
-		gsub('([1-9]%d*)[UL]*', function (m)
-			return tonumber(m, 10)
-		end):
-		gsub('([^%d])(0%d+)[UL]*', function (m1, m2)
-			return m1 .. tonumber(m2, 8)
-		end):
-		gsub("L'(.*)'", function (m)
-			return string.byte(loadstring("return \"" .. m .. "\"")())
-		end)
-	return str
 end
 
 -- c style boolean check (thus, 0 will be false)
@@ -390,6 +371,110 @@ local function removeComments(input)
 	return table.concat(out)
 end
 
+-- C style number parse (UL, LL, L) and (octet, hex, binary)
+local LCPP_TOKENIZE_INTEGER = {
+	string = false,
+	keywords_order = {
+		"STRING_LITERAL",
+		"CHAR_LITERAL",
+		"HEX_LITERAL",
+		"BIN_LITERAL",
+		"OCT_LITERAL",
+		"FPNUM_LITERAL",
+		"NUMBER_LITERAL",
+	},
+	keywords = { 
+		STRING_LITERAL = '^"[^"]*"',
+		CHAR_LITERAL = "^L'.*'",
+		HEX_LITERAL = '^[%+%-]?%s*0x[a-fA-F%d]+[UL]*',
+		BIN_LITERAL = '^[%+%-]?%s*0b%d+[UL]*',
+		OCT_LITERAL = '^[%+%-]?%s*0%d+[UL]*',
+		FPNUM_LITERAL = '^[%+%-]?%s*%d+[%.]?%d*e[%+%-]%d*',
+		NUMBER_LITERAL = '^[%+%-]?%s*%d+[%.]?%d*[UL]+',
+	},
+}
+local function convertNumberForLua(out,input, k,v,start,end_)
+	if k == "CHAR_LITERAL" then
+		table.insert(out, tostring(string.byte(loadstring("return \"" .. v:gsub("^L%'(.+)%'", "%1") .. "\"")())))
+	elseif k == "HEX_LITERAL" then 
+		unary, v = v:match('([%+%-]?)0x([a-fA-F%d]+)[UL]*')
+		local n = tonumber(v, 16)
+		table.insert(out, unary..tostring(n))
+	elseif k == "NUMBER_LITERAL" then 
+		v = v:match('([^UL]+)[UL]+')
+		table.insert(out, v)
+	elseif k == "BIN_LITERAL" then 
+		unary, v = v:match('([%+%-]?)0b([01]+)[UL]*')
+		local n = tonumber(v, 2)
+		table.insert(out, unary..tostring(n))
+	elseif k == "OCT_LITERAL" then 
+		unary, v = v:match('([%+%-]?)(0%d+)[UL]*')
+		local n = tonumber(v, 8)
+		table.insert(out, unary..tostring(n))
+	else
+		table.insert(out, input:sub(start, end_))
+	end
+end
+local function convertNumberForC(out,input, k,v,start,end_)
+	if k == "CHAR_LITERAL" then
+		table.insert(out, tostring(string.byte(loadstring("return \"" .. v:gsub("^L%'(.+)%'", "%1") .. "\"")())))
+	elseif k == "HEX_LITERAL" or k == "NUMBER_LITERAL" or k == "BIN_LITERAL" or k == "OCT_LITERAL" then 
+		v = v:match('([^UL]+)[UL]*') -- remove only last U and L (because luajit complains number like 1UL)
+		table.insert(out, v)
+	else
+		table.insert(out, input:sub(start, end_))
+	end
+end
+local function parseCInteger(input)
+	-- print('parseCInteger:input:' .. input)
+	local out = {}
+	for k, v, start, end_ in tokenizer(input, LCPP_TOKENIZE_INTEGER) do
+	-- print('parseCInteger:' .. k .. "|" .. v)
+		if k == "CHAR_LITERAL" then
+			table.insert(out, tostring(string.byte(loadstring("return \"" .. v:gsub("^L%'(.+)%'", "%1") .. "\"")())))
+		elseif k == "HEX_LITERAL" then 
+			unary, v = v:match('([%+%-]?)0x([a-fA-F%d]+)[UL]*')
+			local n = tonumber(v, 16)
+			table.insert(out, unary..tostring(n))
+		elseif k == "NUMBER_LITERAL" then 
+			v = v:match('([^UL]+)[UL]+')
+			table.insert(out, v)
+		elseif k == "BIN_LITERAL" then 
+			unary, v = v:match('([%+%-]?)0b([01]+)[UL]*')
+			local n = tonumber(v, 2)
+			table.insert(out, unary..tostring(n))
+		elseif k == "OCT_LITERAL" then 
+			unary, v = v:match('([%+%-]?)(0%d+)[UL]*')
+			local n = tonumber(v, 8)
+			table.insert(out, unary..tostring(n))
+		else
+			table.insert(out, input:sub(start, end_))
+		end
+	end
+	local str = table.concat(out)
+	-- print('parseCInteger:result:'..str)
+	return str
+end
+local function _____(input)
+	local str = input:
+		gsub('0x([a-fA-F%d]+)[UL]*', function (m)
+			return tonumber(m, 16)
+		end):
+		gsub('0b([01]+)[UL]*', function (m)
+			return tonumber(m, 2)
+		end):
+		gsub('([1-9]%d*)[UL]*', function (m)
+			return tonumber(m, 10)
+		end):
+		gsub('([^_%w])(0%d+)[UL]*', function (m1, m2)
+			return m1 .. tonumber(m2, 8)
+		end):
+		gsub("L'(.*)'", function (m)
+			return string.byte(loadstring("return \"" .. m .. "\"")())
+		end)
+	return str
+end
+
 -- screener: revmoce comments, trim, ml concat...
 -- it only splits to cpp input lines and removes comments. it does not tokenize. 
 local function screener(input)
@@ -496,7 +581,7 @@ local function apply(state, input)
 		end		
 	end
 
-	-- C liberal string concatenation, process UL, L, LL, U
+	-- C liberal string concatenation, processing U,L,UL,LL
 	return parseCInteger(concatStringLiteral(input)),false
 end
 
@@ -541,13 +626,7 @@ local function processLine(state, line)
 	
 
 	--[[ READ NEW DIRECTIVES ]]--
-	if cmd then
-		-- handle #error
-		local errMsg = cmd:match(ERROR)
-		local errNoTxt = cmd:match(ERROR_NOTEXT)
-		if errMsg then error(errMsg) end
-		if errNoTxt then error("<ERROR MESSAGE NOT SET>") end
-			
+	if cmd then			
 		-- handle #undef ...
 		local key = cmd:match(UNDEF)
 		if type(key) == "string" then
@@ -596,12 +675,23 @@ local function processLine(state, line)
 		end
 		local filename = cmd:match(INCLUDE_NEXT)
 		if filename then
-		print("include_next:"..filename)
+		--print("include_next:"..filename)
 			return state:includeFile(filename, true)
 		end
 		
 		-- ignore, because we dont have any pragma directives yet
 		if cmd:match(PRAGMA) then return end
+
+		-- handle #error
+		local errMsg = cmd:match(ERROR)
+		local errNoTxt = cmd:match(ERROR_NOTEXT)
+		local warnMsg = cmd:match(WARNING)
+		if errMsg then error(errMsg) end
+		if errNoTxt then error("<ERROR MESSAGE NOT SET>") end
+		if warnMsg then 
+			print(warnMsg) 
+			return
+		end
 		
 		-- abort on unknown keywords
 		error("unknown directive: "..line)
@@ -1339,7 +1429,7 @@ function lcpp.test(suppressMsg)
 		#define CLONGLONG 123456789123456789LL
 		#define CULONG 12345678UL
 		#define CUINT 123456U
-		#define BINARY 0b1001 /* 9 */
+		#define BINARY -0b1001 /* -9 */
 		#define OCTET 075 /* 61 */
 		#define NON_OCTET 75
 		#define HEX 0xffffU
@@ -1362,7 +1452,7 @@ function lcpp.test(suppressMsg)
 		assert(CUINT == 123456, "read *U fails")
 		#endif
 		#pragma ignored
-		assert __P((BINARY == 9, "parse, binary literal fails"))
+		assert __P((BINARY == -9, "parse, binary literal fails"))
 		assert(OCTET == 61 and NON_OCTET == 75, "parse octet literal fails")
 	
 		lcpp_test.assertTrue()
@@ -1546,9 +1636,9 @@ function lcpp.test(suppressMsg)
 
 
 		msg = "macro chaining"
-		#define FOO 123
-		#define BAR FOO+123
-		assert(BAR == 123*2, msg)
+		#define FOO 0x7B
+		#define BAR (FOO+0x7B)
+		assert(-BAR == -0x7B*2, msg)
 		#define BAZ 456
 		#define BLUR BA##Z
 		assert(BLUR == 456, msg)
@@ -1765,7 +1855,9 @@ function lcpp.test(suppressMsg)
 		#endif
 	]]
 	lcpp.FAST = false	-- enable full valid output for testing
+	lcpp.SELF_TEST = true
 	local testlua = lcpp.compile(testlcpp)
+	lcpp.SELF_TEST = nil
 	-- print(testlua)
 	assert(loadstring(testlua, "testlua"))()
 	lcpp_test.assertTrueCalls = findn(testlcpp, "lcpp_test.assertTrue()")
