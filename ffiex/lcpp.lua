@@ -393,38 +393,6 @@ local LCPP_TOKENIZE_INTEGER = {
 		NUMBER_LITERAL = '^[%+%-]?%s*%d+[%.]?%d*[UL]+',
 	},
 }
-local function convertNumberForLua(out,input, k,v,start,end_)
-	if k == "CHAR_LITERAL" then
-		table.insert(out, tostring(string.byte(loadstring("return \"" .. v:gsub("^L%'(.+)%'", "%1") .. "\"")())))
-	elseif k == "HEX_LITERAL" then 
-		unary, v = v:match('([%+%-]?)0x([a-fA-F%d]+)[UL]*')
-		local n = tonumber(v, 16)
-		table.insert(out, unary..tostring(n))
-	elseif k == "NUMBER_LITERAL" then 
-		v = v:match('([^UL]+)[UL]+')
-		table.insert(out, v)
-	elseif k == "BIN_LITERAL" then 
-		unary, v = v:match('([%+%-]?)0b([01]+)[UL]*')
-		local n = tonumber(v, 2)
-		table.insert(out, unary..tostring(n))
-	elseif k == "OCT_LITERAL" then 
-		unary, v = v:match('([%+%-]?)(0%d+)[UL]*')
-		local n = tonumber(v, 8)
-		table.insert(out, unary..tostring(n))
-	else
-		table.insert(out, input:sub(start, end_))
-	end
-end
-local function convertNumberForC(out,input, k,v,start,end_)
-	if k == "CHAR_LITERAL" then
-		table.insert(out, tostring(string.byte(loadstring("return \"" .. v:gsub("^L%'(.+)%'", "%1") .. "\"")())))
-	elseif k == "HEX_LITERAL" or k == "NUMBER_LITERAL" or k == "BIN_LITERAL" or k == "OCT_LITERAL" then 
-		v = v:match('([^UL]+)[UL]*') -- remove only last U and L (because luajit complains number like 1UL)
-		table.insert(out, v)
-	else
-		table.insert(out, input:sub(start, end_))
-	end
-end
 local function parseCInteger(input)
 	-- print('parseCInteger:input:' .. input)
 	local out = {}
@@ -453,25 +421,6 @@ local function parseCInteger(input)
 	end
 	local str = table.concat(out)
 	-- print('parseCInteger:result:'..str)
-	return str
-end
-local function _____(input)
-	local str = input:
-		gsub('0x([a-fA-F%d]+)[UL]*', function (m)
-			return tonumber(m, 16)
-		end):
-		gsub('0b([01]+)[UL]*', function (m)
-			return tonumber(m, 2)
-		end):
-		gsub('([1-9]%d*)[UL]*', function (m)
-			return tonumber(m, 10)
-		end):
-		gsub('([^_%w])(0%d+)[UL]*', function (m1, m2)
-			return m1 .. tonumber(m2, 8)
-		end):
-		gsub("L'(.*)'", function (m)
-			return string.byte(loadstring("return \"" .. m .. "\"")())
-		end)
 	return str
 end
 

@@ -217,7 +217,7 @@ local build = function (name, code)
 	-- generate cdefs from source code
 	generate_cdefs(code)
 	-- compile .so
-	print(('gcc -shared -o %s %s %s'):format(obj, opts, src))
+	-- print(('gcc -shared -o %s %s %s'):format(obj, opts, src))
 	local ok, r = pcall(os.execute, ('gcc -shared -o %s %s %s'):format(obj, opts, src))
 	local ra, rb
 	if ok then
