@@ -1,11 +1,15 @@
+[![Build Status](https://travis-ci.org/umegaya/ffiex.png?branch=master)](https://travis-ci.org/umegaya/ffiex)
+
 ffiex
 =====
 
-extend luajit ffi module to give more affinity to C codes
-
+- extend luajit ffi module to give more affinity to C codes
+ - can #include typical system C headers (no more manual C definition injection)
+ - enable to use C sources without pre-build it.
 
 install
 =======
+
 - prerequisity
  - gcc
 - clone this repo and run
@@ -76,7 +80,15 @@ because it will replace the ctype's symbol access... (like stat.st_atime => stat
 ```
  
  
+Improvement
+===========
 
+- able to run on gcc-less environment. I already make some preparation like *ffiex.exconf.cacher* to cache built so files on host side (which should have proper gcc toolchain), but has no good idea for bundling them to final executables yet (for example, into apk or ipa)
+- reduce memory footprint. because current ffiex import all symbols in #include'd header file, so even unnecessary cdefs all exists on memory. one idea is specify required type or function definition like below.
+``` lua
+-- it only import cdefs which relate with fopen (thus, FILE related ones)
+ffiex.include("stdio.h",{"fopen"})
+```
 
 
 License
