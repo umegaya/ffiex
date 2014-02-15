@@ -16,7 +16,7 @@ install
 ``` bash
 sudo bash install.sh
 ```
-- or you can use *moonrocks*
+- or you can use [*moonrocks*](http://rocks.moonscript.org/)
 ``` bash
   moonrocks install ffiex
 ```
