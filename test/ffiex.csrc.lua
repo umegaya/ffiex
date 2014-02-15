@@ -42,13 +42,20 @@ ffi.exconf.cacher = function (name, code, file, so)
 	end	
 	ncall = (ncall + 1)
 end
+ffi.copt {"-D_MYDEF", "-D_MYDEF2=101", "-O2", "-Wall"}
 local lib,ext = ffi.csrc('test', [[
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include "my.h"
-#define MYID (101)
+#if defined(_MYDEF)
 #define GEN_ID(x, y) (x + y)
+#else
+#define GEN_ID(x, y) (x * y)
+#endif
+#define MYID (_MYDEF2)
 extern void hello_csrc(int id, char *buffer) { sprintf(buffer, "id:%d", id); }
+extern bool gen_id_test(int x, int y, int r) { return r == GEN_ID(x, y); }
 void export(int id) { printf("%d", id); }
 static inline void not_export(int id) { 
 	printf("it should not export"); 
@@ -57,10 +64,11 @@ static inline void not_export(int id) {
 
 local msg = ffi.new("char[256]")
 lib.hello_csrc(ffi.defs.MYID, msg)
-print(ffi.defs.MYID)
 assert("id:101" == ffi.string(msg));
 lib.hello_csrc(ffi.defs.GEN_ID(10, 20), msg)
+print(ffi.string(msg))
 assert("id:30" == ffi.string(msg));
+assert(lib.gen_id_test(11, 22, ffi.defs.GEN_ID(11, 22)))
 lib.hello_csrc(ffi.defs.MY_MACRO(2), msg)
 assert("id:246" == ffi.string(msg));
 assert(lib.export);
@@ -68,8 +76,6 @@ local ok, r = pcall(function ()
 	return lib.not_export(100)
 end)
 assert(not ok);
-
-os.remove('./test.so')
 
 
 local lib2,ext2 = ffi.csrc('./test/foo.c')

@@ -54,7 +54,7 @@ ffi.path = function (path, system)
 	end
 	table.insert(searchPath, path)
 	if not system then
-		print("add localSerchPath:" .. path)
+		-- print("add localSerchPath:" .. path)
 		table.insert(localSearchPath, path)
 	end
 end
@@ -240,6 +240,15 @@ ffi.copt = function (opts)
 	for _,opt in ipairs(opts) do
 		if opt:find("-fPIC") then
 			found = true
+		end
+		local def,val = opt:match("-D([_%w]+)=?(.*)")
+		--print(opt, def, val)
+		if def then
+			if #val > 0 then
+				ffi.cdef ("#define "..def.." "..val)
+			else
+				ffi.cdef ("#define "..def)
+			end
 		end
 	end
 	if not found then
