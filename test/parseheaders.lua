@@ -31,7 +31,8 @@ function try_parse_headers(directory)
         	"pcre_stringpiece.h", "pcre_scanner.h", "pcrecpp.h", "pcrecpparg.h", -- c++ header
         	"png.h", -- png_structppng_ptr not exist. I think that is typo of "png_structp png_ptr"
         	"turbojpeg.h", -- luajit cdef cannot process static const int []
-    	}
+    		"db_cxx.h", -- c++ header
+	}
     end
     while true do
         local file = dir:read()

@@ -5,7 +5,12 @@ local tester, err = loadfile('test/ffiex_csrc.lua_')
 if tester then
 	tester()("tcc", function ()
 		ffi.clear_copt()
+		ffi.path "./test/myheaders/"
 		ffi.path "./test/myheaders/tcc/"
+		return {
+			cc = "tcc", 
+			extra = {"-D_MYDEF", "-D_MYDEF2=101", "-O2", "-Wall"},
+		}
 	end)
 else
 	print('fail to load tester:'..err)

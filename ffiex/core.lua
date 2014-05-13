@@ -17,7 +17,7 @@ local function search_header_file(filename, predefines, nxt, _local)
 				if ok and r then
 					-- print('return trypath:'..trypath)
 					r:close()
-					return trypath, path
+					return trypath, trypath:gsub('^(.*/)[^/]+$', '%1')
 				end
 			elseif path == lastTryPath then
 				process = true
@@ -35,15 +35,17 @@ local function search_header_file(filename, predefines, nxt, _local)
 		end
 		if not found then
 			for _,path in ipairs(searchPath) do
+--print('try:'..path)
 				local trypath = (path .. filename)
 				local ok, r = pcall(io.open, trypath, 'r')
 				if ok and r then
 					r:close()
-					return trypath, path
+					return trypath, trypath:gsub('^(.*/)[^/]+$', '%1')
 				end
 			end
 		end
 	end
+	print('not found:' .. filename)
 	return nil
 end
 
@@ -267,7 +269,7 @@ local get_decl_file = function (name, src, depth)
 	return nil 
 end
 ffi.copt = function (opts)
-	if not opts.extra then
+	if opts[1] and (not opts.extra) then
 		opts = { extra = opts }
 	end
 	ffi.clear_copt()
@@ -309,8 +311,12 @@ ffi.copt = function (opts)
 	if not opts.path then
 		opts.path = {}
 	end
-	opts.path.include = localSearchPath
-	opts.path.sys_include = systemSearchPath
+	if type(opts.path.include) ~= 'table' or #opts.path.include <= 0 then
+		opts.path.include = localSearchPath
+	end
+	if type(opts.path.sys_include) ~= 'table' or #opts.path.sys_include <= 0 then
+		opts.path.sys_include = systemSearchPath
+	end
 	if not opts.cache_callback then
 		opts.cache_callback = function (name, src, search)
 		end

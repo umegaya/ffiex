@@ -35,6 +35,7 @@ local function clear_option(self)
 	self.state = new_tcc()
 	self.opts = nil
 	self.option_applied = nil
+	self.build_once = nil
 end
 --[[
 	options = {
@@ -93,17 +94,28 @@ end
 function cc:exit()
 end
 function cc:build(code)
+	if self.build_once then
+		if self.state then
+			lib.tcc_delete(self.state)
+		end
+		self.state = new_tcc()
+		self.build_once = nil
+		self.option_applied = nil
+	end	
 	if not self.option_applied then
 		self.option_applied = true
 		apply_option(self)
 	end
 	if lib.tcc_compile_string(self.state, code) < 0 then
+		self.build_once = true
 		return nil, self.error
 	end
 	local tmp = os.tmpname()
 	if lib.tcc_output_file(self.state, tmp) < 0 then
+		self.build_once = true
 		return nil, "output error:to:"..tmp
 	end
+	self.build_once = true
 	return tmp, nil
 end
 function cc:option(opts)
