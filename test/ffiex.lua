@@ -27,3 +27,5 @@ ffi.path "/Applications/Xcode.app/Contents/Developer/usr/lib/llvm-gcc/4.2.1/incl
 ffi.cdef "#include <lauxlib.h>"
 
 assert(ffi.C.luaL_newstate, "could not parse lauxlib.h correctly")
+
+return true
