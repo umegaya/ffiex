@@ -77,11 +77,29 @@ because it will replace the ctype's symbol access... (like stat.st_atime => stat
 - only function symbol which has no static qualifier, will be exported to clib object.
  
 ### ffiex.copt(opts:table)
-- put C compile option which is used by ffiex.csrc. mutiple call of ffiex.copt overwrites previous options. (but not removed previously defined -D_*MACRO* options from ffi.defs.) 
+- put C compile option which is used by ffiex.csrc. mutiple call of ffiex.copt overwrites previous options. 
 ``` lua
  -- example, apply -O2, -Wall, 2 pre-defined macro for input of ffiex.csrc
+ ffi.copt {
+    extra = {"-D_MYDEF", "-D_MYDEF2=101", "-O2", "-Wall"}
+ }
+ -- still you can use old style option
  ffi.copt {"-D_MYDEF", "-D_MYDEF2=101", "-O2", "-Wall"}
 ```
+fully opts format is like following
+``` lua
+options = {
+		path = {
+			include = { path1, path2, ... },
+			sys_include = { syspath1, syspath2, ... },
+			lib = { libpath1, libpath2, ... }
+		},
+		lib = { libname1, libname2, ... },
+		extra = { opt1, opt2, ... },
+		define = { booldef1, booldef2, ... def1 = val1, def2 = val2 }
+	}
+```
+
  
  
 Improvement
