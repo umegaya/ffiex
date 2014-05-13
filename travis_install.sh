@@ -20,9 +20,10 @@ pushd tmp
 git clone --depth 1 git://repo.or.cz/tinycc.git --branch $TCC_VERSION
 pushd tinycc
 sudo ./configure && make DISABLE_STATIC=1 && make install
-sudo cp $TCC_LIB_NAME /usr/local/lib/$TCC_LIB
+sudo cp $TCC_LIB_NAME /usr/local/lib/
+sudo ln -s /usr/local/lib/$TCC_LIB_NAME /usr/local/lib/$TCC_LIB
 sudo sh -c "echo '/usr/local/lib' > /etc/ld.so.conf.d/tcc.conf"
-sudo ldconfig
+sudo ldconfig -v
 popd
 popd
 fi
