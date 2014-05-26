@@ -1,10 +1,9 @@
 function try_parse_headers(directory)
     local dir = io.popen('ls '..directory)
-    local ffi = require "ffiex.core"
+    local ffi = require "ffiex.init"
     local blacklist
     if ffi.os == "OSX" then
     	ffi.cdef "#define XP_NO_X_HEADERS"
-        ffi.search("/Applications/Xcode.app/Contents/Developer/usr", "stdarg.h", true)
         blacklist = {
             "cxxabi.h", -- namespace is contained
             "nc_tparm.h", -- TPARM_1 declared twice

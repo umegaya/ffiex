@@ -89,9 +89,13 @@ end
 cc = {}
 
 -- define method
-function cc:init()
+local builder = {}
+function builder.new()
+	return setmetatable({}, {__index = cc})
 end
-function cc:exit()
+function cc:init(state)
+end
+function cc:exit(state)
 end
 function cc:build(code)
 	if self.build_once then
@@ -126,4 +130,4 @@ function cc:get_option()
 	return self.opts
 end
 
-return cc
+return builder

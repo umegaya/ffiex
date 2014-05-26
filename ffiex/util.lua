@@ -1,20 +1,20 @@
 local _M = {}
-local ffi = require 'ffiex.core'
+local ffi = require 'ffi'
 
 -- add compiler predefinition
-function _M.add_builtin_defs()
+function _M.add_builtin_defs(state)
 	local p = io.popen('echo | gcc -E -dM -')
 	local predefs = p:read('*a')
-	ffi.cdef(predefs)
+	state:cdef(predefs)
 	p:close()
 	-- os dependent tweak.
 	if ffi.os == 'OSX' then
 		-- luajit cannot parse objective-C code correctly
 		-- e.g.  int      atexit_b(void (^)(void)) ;
-		ffi.undef({"__BLOCKS__"})
+		state:undef({"__BLOCKS__"})
 	end
 end
-function _M.clear_builtin_defs()
+function _M.clear_builtin_defs(state)
 	local p = io.popen('echo | gcc -E -dM -')
 	local undefs = {}
 	while true do 
@@ -28,12 +28,12 @@ function _M.clear_builtin_defs()
 			break
 		end
 	end
-	ffi.undef(undefs)
+	state:undef(undefs)
 	p:close()
 end
 
 -- add compiler built in header search path
-function _M.add_builtin_paths()
+function _M.add_builtin_paths(state)
 	local p = io.popen('echo | gcc -xc -v - 2>&1 | cat')	
 	local search_path_start
 	while true do
@@ -48,7 +48,7 @@ function _M.add_builtin_paths()
 				-- remove unnecessary output of osx clang.
 				tmp = tmp:gsub(' %(framework directory%)', '')
 				-- print('builtin_paths:'..tmp)
-				ffi.path(tmp, true)
+				state:path(tmp, true)
 			else
 				break
 			end
