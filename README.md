@@ -14,6 +14,7 @@ install
 
 - prerequisity
  - gcc or tcc (if you want to use csrc API)
+ - for instance tcc installation, run travis_install.sh at top of this repo.
 - clone this repo and run
 ``` bash
 sudo bash install.sh
@@ -36,9 +37,9 @@ usage
 update logs
 ===========
 #### 0.2.0 
-- ffi.import(symbols):from(code) to support selective cdef from header files
-- limited support for tcc (linux only)
-- ffi.newstate() to create isolated parse state object which has its own include search path, macro cache, cdef dependency cache. 
+- [ffi.import(symbols):from(code)](https://github.com/umegaya/ffiex#ffieximportsymbolstablefromcodestring) to support selective cdef from header files
+- ffiex.csrc's build backend now pluggable, limited support for tcc (linux only)
+- [ffi.newstate()](https://github.com/umegaya/ffiex#stateffi_state--ffiexnewstate) to create isolated parse state object which has its own include search path, macro cache, cdef dependency cache. 
  - mainly for module writers who want to avoid polluting main ffiex's parsing state by cdef'ing some own header file or adding header search path of module own.
 - major refactoring
 
@@ -104,6 +105,8 @@ because it will replace the ctype's symbol access... (like stat.st_atime => stat
 fully opts format is like following
 ``` lua
 options = {
+    -- string "gcc", "tcc" or table or table which implements build backend 
+    cc = <<compiler definition>>, 
 		path = {
 			include = { path1, path2, ... },
 			sys_include = { syspath1, syspath2, ... },
@@ -133,7 +136,7 @@ ffiex.import({"wait"}):from("#include <sys/wait.h>")
 ffiex.import({"func wait"}):from("#include <sys/wait.h>") 
 -- search union which name is "wait"
 ffiex.import({"union wait"}):from("#include <sys/wait.h>") 
--- note that if you specify "struct wait", also "union wait" is injected. that is, ffiex ignores wrongness of keyword
+-- note that if you specify "struct wait", also "union wait" is injected. that is, ffiex ignores difference of struct/union/enum.
 ffiex.import({"struct wait"}):from("#include <sys/wait.h>") 
 ``` 
 - ffiex internally caches parsing result of *code*, so you can call ffiex.import(symbols) multiple times for same header file.
@@ -168,10 +171,55 @@ extern int pthread_join (pthread_t __th, void **__thread_return);
 - so if each module requires special macro definition or header file path, it never *pollutes* main ffiex module's, as long as you use your own parse state object.
 - so I think if you wants to write module which depends on ffiex, you should use ffiex.newstate() instead of calling ffiex.* directly.
 
+Add own build backend
+=====================
+- now ffiex.copts(options) can accept build backend through parameter of *options.cc*
+- options.cc could be "gcc" or "tcc", but also you can specify your own build backend module.
+- build backend module should be implemented as following:
+
+``` lua
+-- builder must have new() method to create new builder.
+local builder = {}
+function builder.new()
+	return setmetatable({}, {__index = cc})
+end
+-- returned builder object has following 5 methods
+
+
+-- initialize. do something for ffi_state object *state* to make this backend work.
+function cc:init(state)
+end
+
+-- finalize. cleanup something which is done to *state* in cc:init.
+function cc:exit(state)
+end
+
+-- build code, create share object file, and return following:
+-- in success : shared object path, nil
+-- in failure : nil, error string
+function cc:build(code)
+end
+
+-- apply compile option to backend
+-- *opts* should be preserved in this module and returnable from cc:get_option
+function cc:option(opts)
+    self.opts = opts
+end
+
+-- return option which preserved at cc:option()
+function cc:get_option()
+    return self.opts
+end
+
+return builder --> you can pass this as parameter of options.cc for ffiex.copts.
+```
+- for more detail, please see ffiex/builder/*.lua.
+
+
 Improvement
 ===========
 
-- (patirally solved with #4) able to run on gcc-less environment. I already make some preparation like *ffiex.exconf.cacher* to cache built so files on host side (which should have proper gcc toolchain), but has no good idea for bundling them to final executables yet (for example, into apk or ipa)
+- (partially solved with #4) able to run on gcc-less environment. I already make some preparation like *ffiex.exconf.cacher* to cache built so files on host side (which should have proper gcc toolchain), but has no good idea for bundling them to final executables yet (for example, into apk or ipa)
 
 - (solved with #5) reduce memory footprint. because current ffiex import all symbols in #include'd header file, so even unnecessary cdefs all exists on memory. one idea is specify required type or function definition like below. 
 
