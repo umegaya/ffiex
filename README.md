@@ -228,3 +228,8 @@ License
 =======
 
 apache v2 (http://www.apache.org/licenses/LICENSE-2.0)
+
+
+about sponsored
+===============
+- [DokyoGames, inc](https://www.facebook.com/DokyoGames) for supporting development of selective cdef feature.
