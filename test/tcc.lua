@@ -1,4 +1,4 @@
-local ffi = require 'ffiex.core'
+local ffi = require 'ffiex.init'
 -- in 0.9.26, only tcc --run is supported for OSX.
 if ffi.os == "OSX" then return true end
 local tester, err = loadfile('test/ffiex_csrc.lua_')

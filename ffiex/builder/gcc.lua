@@ -1,4 +1,3 @@
-local ffi = require 'ffiex.core'
 local util = require 'ffiex.util'
 local cc = {}
 local function error_callback(self, msg)
@@ -53,13 +52,17 @@ local function apply_option(self)
 end
 
 -- define method
-function cc:init()
-	util.add_builtin_defs()
-	util.add_builtin_paths()
+local builder = {}
+function builder.new()
+	return setmetatable({}, {__index = cc})
 end
-function cc:exit()
-	ffi.clear_paths(true)
-	util.clear_builtin_defs()
+function cc:init(state)
+	util.add_builtin_defs(state)
+	util.add_builtin_paths(state)
+end
+function cc:exit(state)
+	state:clear_paths(true)
+	util.clear_builtin_defs(state)
 end
 function cc:build(code)
 	local opts = apply_option(self)
@@ -94,4 +97,4 @@ function cc:get_option()
 	return self.opts
 end
 
-return cc
+return builder
