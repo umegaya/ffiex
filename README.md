@@ -6,19 +6,21 @@ ffiex
 - extend luajit ffi module to give more affinity to C codes
  - can #include typical system C headers (no more manual C definition injection)
  - enable to use C sources without pre-build it.
+- caution : there is no official support for windows related OS.
+
 
 install
 =======
 
 - prerequisity
- - gcc
+ - gcc or tcc (if you want to use csrc API)
 - clone this repo and run
 ``` bash
 sudo bash install.sh
 ```
 - or you can use [*moonrocks*](http://rocks.moonscript.org/)
 ``` bash
-  moonrocks install ffiex
+moonrocks install ffiex
 ```
 
 
@@ -29,6 +31,19 @@ usage
 ``` lua
  local ffi = requie 'ffiex'
 ```
+
+
+update logs
+===========
+#### 0.2.0 
+- ffi.import(symbols):from(code) to support selective cdef from header files
+- limited support for tcc (linux only)
+- ffi.newstate() to create isolated parse state object which has its own include search path, macro cache, cdef dependency cache. 
+ - mainly for module writers who want to avoid polluting main ffiex's parsing state by cdef'ing some own header file or adding header search path of module own.
+- major refactoring
+
+#### 0.1.0 
+- initial release
 
 
 APIs
@@ -100,17 +115,65 @@ options = {
 	}
 ```
 
- 
- 
+### ffiex.import(symbols:table):from(code:string)
+- parsing *code* and import symbols which has dependency with *symbols*.
+- *symbols* are given as table of strings, and *code* has same format which is given to ffiex.cdef, like following.
+``` lua
+ffiex.import({"pthread_t", "pthread_create"}):from("#include <pthread.h>")
+```
+- some symbol has multiple meaning (eg. union wait/int wait(int *) in OSX), in this case following rules are applied for deciding actual symbol name. 
+ - single symbol name with no keyword like struct/union/enum, ffiex first try to find function with that name, then struct/union/enum/typename
+ - if you specify "func" keyword, then ffiex try to search function entry of this name
+ - if you specify "struct/union/enum/typename", then ffiex try to search struct/union/enum/typename entry of that name
+
+``` lua 
+-- search function which name is "wait", if not found then try union/struct/enum/typename which name is "wait"
+ffiex.import({"wait"}):from("#include <sys/wait.h>") 
+-- search function which name is "wait"
+ffiex.import({"func wait"}):from("#include <sys/wait.h>") 
+-- search union which name is "wait"
+ffiex.import({"union wait"}):from("#include <sys/wait.h>") 
+-- note that if you specify "struct wait", also "union wait" is injected. that is, ffiex ignores wrongness of keyword
+ffiex.import({"struct wait"}):from("#include <sys/wait.h>") 
+``` 
+- ffiex internally caches parsing result of *code*, so you can call ffiex.import(symbols) multiple times for same header file.
+
+### ffiex.src_of(symbol:string, recursive:boolean)
+- get declaration code of specified *symbol* 
+- *symbol* is symbol name and has same rules as each element of *symbols* for ffiex.import
+- *recursive* specifies whether ffiex should resolve dependency recursively, if true, ffiex traverses dependency chain recursively and list up all dependent symbols of *symbol*
+``` lua
+ffiex.cdef("#include <pthread.h>")
+ffiex.src_of("pthread_t") --> returns "extern int pthread_join (pthread_t __th, void **__thread_return);"
+ffiex.src_of("pthread_t", true) --[[returns "
+typedef unsigned long int pthread_t;
+extern int pthread_join (pthread_t __th, void **__thread_return);
+"
+]]
+```
+
+### state:ffi_state = ffiex.newstate()
+- get isolated parsing state object which provides same methods of ffiex.
+- *state* has following methods, which equivalent to the same method of ffiex(ffi)
+ - state:cdef
+ - state:path
+ - state:search
+ - state.defs
+ - state:csrc
+ - state:copt
+ - state:import(...):from(...)
+ - state:src_of
+ - state:load
+- it is useful for module writer, because header search path and macro/dependency-tree(for ffiex.import) cache are isolated among each state object created by ffiex.newstaet() and ffiex module itself. 
+- so if each module requires special macro definition or header file path, it never *pollutes* main ffiex module's, as long as you use your own parse state object.
+- so I think if you wants to write module which depends on ffiex, you should use ffiex.newstate() instead of calling ffiex.* directly.
+
 Improvement
 ===========
 
-- able to run on gcc-less environment. I already make some preparation like *ffiex.exconf.cacher* to cache built so files on host side (which should have proper gcc toolchain), but has no good idea for bundling them to final executables yet (for example, into apk or ipa)
-- reduce memory footprint. because current ffiex import all symbols in #include'd header file, so even unnecessary cdefs all exists on memory. one idea is specify required type or function definition like below.
-``` lua
--- it only import cdefs which relate with fopen (thus, FILE related ones)
-ffiex.include("stdio.h",{"fopen"})
-```
+- (patirally solved with #4) able to run on gcc-less environment. I already make some preparation like *ffiex.exconf.cacher* to cache built so files on host side (which should have proper gcc toolchain), but has no good idea for bundling them to final executables yet (for example, into apk or ipa)
+
+- (solved with #5) reduce memory footprint. because current ffiex import all symbols in #include'd header file, so even unnecessary cdefs all exists on memory. one idea is specify required type or function definition like below. 
 
 
 License
