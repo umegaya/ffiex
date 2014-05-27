@@ -14,7 +14,7 @@ ffi.C.sprintf(msg, "%d:%d", ffi.new("int", 100), ffi.new("int", 200))
 assert(ffi.string(msg) == "100:200")
 
 
-ffi.load("pthread")
+local lib = ffi.load("pthread")
 ffi.import({
 "pthread_join",
 "pthread_create",
@@ -23,7 +23,7 @@ ffi.import({
 #include <pthread.h>
 ]]
 
-assert(ffi.C.pthread_join)
-assert(ffi.C.pthread_create)
+assert(lib.pthread_join)
+assert(lib.pthread_create)
 
 return true

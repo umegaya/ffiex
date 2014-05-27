@@ -33,7 +33,9 @@ local function make_sym_dep(sym, name, deps, cdef)
 	local cdef = cdef:gsub("^%s+", ""):gsub("%s+$", "")
 	if sym[name] then
 		local prev_cdef = sym[name].cdef
-		if prev_cdef and prev_cdef:gsub('%s', '') ~= cdef:gsub('%s', '') then
+		if prev_cdef and 
+			prev_cdef:gsub('%s', ''):gsub('__asm__%s*%b()', '') ~= 
+			cdef:gsub('%s', ''):gsub('__asm__%s*%b()', '') then
 			-- typedef struct/union/enum hoge hoge; => struct/union/enum hoge {...} is valid.
 			if not prev_cdef:find('^typedef%s+[_%w]+%s+'..name.."%s+"..name) then
 				print(name..' conflict: ['..sym[name].cdef..']=>['..cdef..']')
@@ -334,13 +336,14 @@ local function common_parse_type_decls(sym, deps, src)
 end
 
 local STRUCT_PATTERN_LIST
-local function common_parse_struct_deps(sym, deps, struct_body)
+local function common_parse_struct_deps(sym, deps, struct_body, parent_struct)
 	return common_parser(
 		sym, 
 		deps, 
 		struct_body:sub(2, -2), 
 		STRUCT_PATTERN_LIST,
-		"%;"
+		"%;",
+		parent_struct
 	)
 end
 
@@ -442,7 +445,7 @@ local function parse_structure_typedef(sym, opaque, deps, matches, src)
 	if matches[1] == "enum" then
 		make_sym_dep(sym, typename, {}, src)
 	else
-		common_parse_struct_deps(sym, vardeps, matches[3])
+		common_parse_struct_deps(sym, vardeps, matches[3], typename)
 		make_sym_dep(sym, typename, vardeps, src)
 	end
 	local typedecls, depslist = common_parse_type_decls(sym, {}, matches[4])
@@ -529,7 +532,7 @@ local STRUCTURE_DECL="^"..
 local function parse_structure_decl(sym, opaque, deps, matches, src)
 	src = restore_src(src, opaque)
 	local typename, vardeps = matches[2], {}
-	common_parse_struct_deps(sym, vardeps, matches[3])
+	common_parse_struct_deps(sym, vardeps, matches[3], typename)
 	make_sym_dep(sym, typename, vardeps, src)
 end
 
@@ -614,7 +617,7 @@ local STRUCT_VAR_ANON_STRUCT="^"..
 	"("..STRUCT_VAR_LIST..")"..OPT_SPACE_OR_STAR..
 	"("..ALL_REMAINS..")"
 local function parse_struct_var_anon_struct(sym, opaque, deps, matches, src)
-	common_parse_struct_deps(sym, deps, matches[2])
+	common_parse_struct_deps(sym, deps, matches[2], opaque)
 end
 
 -- (struct/union/enum) typename_t {...} *val1, *val2, ..., *valN;
@@ -626,8 +629,9 @@ local STRUCT_VAR_STRUCT="^"..
 local function parse_struct_var_struct(sym, opaque, deps, matches, src)
 	local vardeps = {}
 	local typename = matches[2]
-	common_parse_struct_deps(sym, vardeps, matches[3])
-	make_sym_dep(sym, typename, vardeps, src)
+	common_parse_struct_deps(sym, vardeps, matches[3], opaque)
+	-- currently, struct declaration in struct cannot be injected (empty string returns)
+	make_sym_dep(sym, typename, vardeps, "")
 	table.insert(deps, typename)
 end
 
@@ -789,7 +793,12 @@ local function traverse_cdef(tree, symbol, injected, depth)
 	end
 	if not injected.lookup[symbol] then
 		injected.lookup[symbol] = true
-		table.insert(injected.list, sym)
+		-- it is possible that multiple symbols defined in same cdef
+		-- de-dupe that
+		if not injected.chunks[sym.cdef] then
+			injected.chunks[sym.cdef] = true
+			table.insert(injected.list, sym)
+		end
 	end
 end
 
@@ -809,6 +818,7 @@ local function inject(tree, symbols)
 		lookup = {},
 		list = {},
 		seen = {},
+		chunks = {},
 	}
 	for _,symbol in ipairs(symbols) do
 		traverse_cdef(tree, get_name_in_sym(tree, symbol), injected, 0)
