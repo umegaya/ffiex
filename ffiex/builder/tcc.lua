@@ -1,4 +1,4 @@
-local ffi = require 'ffiex.core'
+local ffi = require 'ffiex.init'
 local lib
 
 -- initialize cc 

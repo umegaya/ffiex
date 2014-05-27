@@ -438,7 +438,7 @@ function ffi_state:load(...)
 	ffi.load(...)
 end
 function ffi_state:src_of(symbol, recursive)
-	symbol = parser_lib.name(symbol)
+	symbol = parser_lib.name(self.tree, symbol)
 	return recursive and 
 		parser_lib.inject({symbol}) or 
 		assert(self.tree[symbol], "no such symbol:"..symbol).cdef

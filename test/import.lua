@@ -18,6 +18,7 @@ ffi.load("pthread")
 ffi.import({
 "pthread_join",
 "pthread_create",
+"pthread_mutex_t",
 }):from [[
 #include <pthread.h>
 ]]

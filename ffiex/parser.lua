@@ -2,10 +2,10 @@
 -- logger 
 ---------------------------------------------------
 local function log(...)
-	--print(...)
+	-- print(...)
 end
 local function vlog(...)
-	--print(...)
+	-- print(...)
 end
 
 
@@ -114,6 +114,7 @@ end
 local TYPEDEF_SYMBOL="typedef"
 local SPACE="%s+"
 local OPTSPACE="%s*"
+local OPT_UNDERSCORE="%_*"
 local SPACE_OR_STAR="[%s%*]+"
 local OPT_SPACE_OR_STAR="[%s%*]*"
 local TYPENAME="[_%w]+"
@@ -156,6 +157,15 @@ local QUALIFY_KEYWORD_CAPTURE = {
 }
 local FUNC_TYPE_SYMBOL="%(?"..VAR_DECL..OPTSPACE.."%)?"
 local HO_FUNC_TYPE_SYMBOL="%(?"..VAR_DECL..OPTSPACE..ARG_VAR_LIST..OPTSPACE.."%)?"
+
+local function init_qualifer_keywords()
+	local tmp = {}
+	for _,kw in ipairs(QUALIFY_KEYWORD) do
+		table.insert(tmp, "^"..OPT_UNDERSCORE.."("..kw..")"..OPT_UNDERSCORE)
+	end
+	QUALIFY_KEYWORD = tmp
+end
+init_qualifer_keywords()
 
 
 -- element definition with capture
@@ -219,6 +229,10 @@ local function common_parser(sym, deps, body, patterns, sep, opaque)
 	return sym
 end
 
+local qualifier_patterns = {
+	"^(long long)"..OPTSPACE, 
+	"^([_%w$]+)"..OPTSPACE,
+}
 local function common_parse_qualifier(sym, src, ext_attr_list)
 	local attr = {}
 	local symbol
@@ -229,17 +243,20 @@ local function common_parse_qualifier(sym, src, ext_attr_list)
 		local found
 		local s, e, m 
 		-- special treatment for evil "long long" (has space in keyword)
-		for _,pattern in ipairs({"^(long long)", "^([_%w$]+)"}) do
-			s, e, m = match(src, pattern..OPTSPACE)
+		for _,pattern in ipairs(qualifier_patterns) do
+			s, e, m = match(src, pattern)
 			if s then break end
 		end
 		if s then
 			src = src:sub(e + 1)
 			local token = m[1]
 			for _, kw in ipairs(QUALIFY_KEYWORD) do
-				if token == kw then
-					attr[kw] = true
+				s, e, m = match(token, kw)
+				--print('token and kw:'..token.."|"..kw, s, e, #token, m and m[1])
+				if s and (e == #token) then
+					attr[m[1]] = true
 					found = true
+					break
 				end
 			end
 			if not found then
@@ -248,6 +265,7 @@ local function common_parse_qualifier(sym, src, ext_attr_list)
 					if s then
 						attr[kw] = ext_attr_list[tostring(m)]
 						found = true
+						break
 					end
 				end
 			end
@@ -775,12 +793,14 @@ local function traverse_cdef(tree, symbol, injected, depth)
 	end
 end
 
-local function get_name_in_sym(symbol)
-	local s, e = symbol:find('%s')
+local function get_name_in_sym(tree, symbol)
+	local s, e = symbol:find('%s+')
 	if s then
-		return symbol:sub(e+1)
+		local pfx = symbol:sub(1, s)
+		return pfx == "func" and symbol or symbol:sub(e+1)
 	else
-		return get_func_sym_name(symbol)
+		local fsym = get_func_sym_name(symbol)
+		return tree[fsym] and fsym or symbol
 	end
 end
 
@@ -791,7 +811,7 @@ local function inject(tree, symbols)
 		seen = {},
 	}
 	for _,symbol in ipairs(symbols) do
-		traverse_cdef(tree, get_name_in_sym(symbol), injected, 0)
+		traverse_cdef(tree, get_name_in_sym(tree, symbol), injected, 0)
 	end
 	local cdef = ""
 	for _,sym in ipairs(injected.list) do
