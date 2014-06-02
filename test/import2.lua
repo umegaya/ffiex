@@ -5,6 +5,7 @@ if ffi.os == 'OSX' then
 	-- disable all __asm alias (because luajit cannot find aliasing symbols)
 	ffi.cdef "#define __asm(exp)"
 end
+local lib = ffi.load("pthread")
 local symbols = {
 	--> from pthread
 	"pthread_t", "pthread_mutex_t", 
@@ -29,6 +30,8 @@ for _,sym in ipairs(symbols) do
 	if sym:find(".+_t$") then
 		local ok,ct = pcall(ffi.typeof, sym)
 		assert(ok, sym .. " not found")
+	elseif sym:find("^pthread") then
+		assert(lib[sym], sym .. " not found")
 	else
 		assert(ffi.C[sym], sym .. " not found")
 	end
