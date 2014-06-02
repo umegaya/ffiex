@@ -28,13 +28,13 @@ local function apply_option(self)
 		if type(opts.extra) == 'table' then
 			cmdopts = (cmdopts .. " " .. table.concat(opts.extra, " "))
 		end
-		if type(opts.path.include) == 'table' then
+		if type(opts.path.include) == 'table' and #(opts.path.include) > 0 then
 			cmdopts = (cmdopts .. " -I" .. table.concat(opts.path.include, " -I"))
 		end
-		if type(opts.path.lib) == 'table' then
+		if type(opts.path.lib) == 'table' and #(opts.path.lib) > 0 then
 			cmdopts = (cmdopts .. " -L" .. table.concat(opts.path.lib, " -L"))
 		end
-		if type(opts.lib) == 'table' then
+		if type(opts.lib) == 'table' and #(opts.lib) > 0 then
 			cmdopts = (cmdopts .. " -l" .. table.concat(opts.lib, " -l"))
 		end
 		if type(opts.define) == 'table' then

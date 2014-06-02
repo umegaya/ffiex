@@ -32,15 +32,18 @@ local function make_sym_dep(sym, name, deps, cdef)
 	end
 	local cdef = cdef:gsub("^%s+", ""):gsub("%s+$", "")
 	if sym[name] then
-		local prev_cdef = sym[name].cdef
-		if prev_cdef and 
-			prev_cdef:gsub('%s', ''):gsub('__asm__%s*%b()', '') ~= 
-			cdef:gsub('%s', ''):gsub('__asm__%s*%b()', '') then
-			-- typedef struct/union/enum hoge hoge; => struct/union/enum hoge {...} is valid.
-			if not prev_cdef:find('^typedef%s+[_%w]+%s+'..name.."%s+"..name) then
-				print(name..' conflict: ['..sym[name].cdef..']=>['..cdef..']')
-			else
-				--print(name..' conflict: ['..sym[name].cdef..']=>['..cdef..']')
+		if sym[name].temp then
+			local prev_cdef = sym[name].cdef
+			if prev_cdef:gsub('%s', ''):gsub('__asm__%s*%b()', '') ~= 
+				cdef:gsub('%s', ''):gsub('__asm__%s*%b()', '') then
+				-- struct/union/enum hoge hoge; => struct/union/enum hoge {...} is valid.
+				if #prev_cdef <= 0 or prev_cdef:find('^typedef%s+[_%w]+%s+'..name.."%s+"..name) then
+					log(name..' ok: ['..sym[name].cdef..']=>['..cdef..']')
+				elseif prev_cdef:find('^struct+%s+[_%w]') then
+					log(name..' ok: ['..sym[name].cdef..']=>['..cdef..']')
+				else
+					print(name..' conflict: ['..sym[name].cdef..']=>['..cdef..']')
+				end
 			end
 		else
 			log('caution:'..name.." already exist:"..debug.traceback())
@@ -60,13 +63,15 @@ local function make_func_dep(sym, name, deps, cdef)
 	make_sym_dep(sym, get_func_sym_name(name), deps, cdef)
 end
 
-local function make_incomplete_decl(sym, name)
-	if sym[name] and sym[name].cdef then
+local function make_incomplete_decl(sym, name, cdef)
+	if sym[name] and (not sym[name].temp) then
 		log(name .. " already declared as:["..sym[name].cdef.."]")
 		return
 	end
 	sym[name] = {
 		name = name,
+		cdef = cdef,
+		temp = true,
 	}
 end
 
@@ -316,7 +321,7 @@ local function common_parse_qualifier(sym, src, ext_attr_list)
 		symbol = base_type
 	end
 	if not has_sym(sym, symbol) then
-		make_incomplete_decl(sym, symbol)
+		make_incomplete_decl(sym, symbol, src)
 	end
 	return symbol, attr, varname
 end
@@ -423,7 +428,7 @@ local function parse_typedef(sym, opaque, deps, matches, src)
 		end
 		if typename == typedecl then
 			log('typedecl same name as typename:'..typename)
-			make_incomplete_decl(sym, typename)
+			make_incomplete_decl(sym, typename, src)
 		else
 			make_sym_dep(sym, typedecl, depends, src)
 		end
@@ -554,7 +559,7 @@ local STRUCTURE_PREDECL="^"..
 local function parse_structure_predecl(sym, opaque, deps, matches, src)
 	src = restore_src(src, opaque)
 	local typename = matches[2]
-	make_incomplete_decl(sym, typename)
+	make_incomplete_decl(sym, typename, src)
 end
 
 -- qualifier *val1[size1], *val2[size2], ..., *valN[sizeN];
