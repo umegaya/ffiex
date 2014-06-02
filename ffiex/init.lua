@@ -104,7 +104,7 @@ local function generate_cdefs(state, code)
 		local _, offset = string.find(code, '\n', current+1, true)
 		local line = code:sub(current+1, offset)
 		-- matching simple function declaration (e.g. void foo(t1 a1, t2 a2))
-		local _, count = line:gsub('^%s*([_%a][_%w]*%s+[_%a][_%w]*%b()).*', function (s)
+		local _, count = line:gsub('^%s*([_%a][_%w]*%s+[_%a][_%w]*%b())%s*%b{}', function (s)
 			--print(s)
 			decl = (decl .. "extern " .. s .. ";\n")
 		end)
@@ -112,7 +112,7 @@ local function generate_cdefs(state, code)
 		-- (e.g. extern void foo(t1 a1, t2 a2), static void bar())
 		-- and not export function declaration contains 'static' specifier
 		if count <= 0 then
-			line:gsub('(.*)%s+([_%a][_%w]*%s+[_%a][_%w]*%b()).*', function (s1, s2)
+			line:gsub('(.*)%s+([_%a][_%w]*%s+[_%a][_%w]*%b())%s*%b{}', function (s1, s2)
 				--print(s1 .. "|" .. s2)
 				if not s1:find('static') then
 					decl = (decl .. "extern " .. s2 .. ";\n")
