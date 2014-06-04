@@ -8,6 +8,11 @@ pushd ffiex*/ffiex
 luarocks make 
 popd
 OUT=`luajit install_test.lua`
+if [ "$?" -ne "0" ]; 
+then
+  echo "test fails"
+  exit -2
+fi
 rm ffiex-*.src.rock
 find . -type d -name "ffiex-*" -exec rm -rf {} \;
 if [ "$OUT" -ne "1000" ];

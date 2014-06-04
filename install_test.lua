@@ -1,4 +1,4 @@
-local ffi = require 'ffiex'
+local ffi = require 'ffiex.init'
 local lib,ext = ffi.csrc('test', [[
 #include <stdio.h>
 extern void test(int id) { printf("%d", id); }
