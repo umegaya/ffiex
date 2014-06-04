@@ -279,7 +279,7 @@ end
 function ffi_state:clear_paths(system)
 	local tmp = {}
 	local removed = system and self.systemSearchPath or self.localSearchPath
-	for _,s in ipairs(searchPath) do
+	for _,s in ipairs(self.searchPath) do
 		local found
 		for _,t in ipairs(removed) do
 			if s == t then
