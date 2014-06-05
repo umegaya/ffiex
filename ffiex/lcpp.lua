@@ -872,8 +872,8 @@ local LCPP_TOKENIZE_EXPR = {
 		"NOT", 
 		"BNOT", 
 		-- literal
-		"STRING_LITERAL",
 		"CHAR_LITERAL",
+		"STRING_LITERAL",
 		"HEX_LITERAL",
 		"FPNUM_LITERAL",
 		"NUMBER_LITERAL",
@@ -909,8 +909,8 @@ local LCPP_TOKENIZE_EXPR = {
 		NOT = '^!', 
 		BNOT = '^~',
 
-		STRING_LITERAL = '^L?"[^"]*"',
 		CHAR_LITERAL = "^L?'.*'",
+		STRING_LITERAL = '^L?"[^"]*"',
 		HEX_LITERAL = '^[%+%-]?0?x[a-fA-F%d]+[UL]*',
 		FPNUM_LITERAL = '^[%+%-]?%d+[%.]?%d*e[%+%-]%d*',
 		NUMBER_LITERAL = '^[%+%-]?0?b?%d+[%.]?%d*[UL]*',
@@ -1019,7 +1019,7 @@ evaluate = function (node)
 		end
 		return v
 	end
-	print(node.op..':'..tostring(node.l.v or node.l.op).."("..type(node.l.v)..")|"..tostring(node.r.v or node.r.op).."("..type(node.r.v)..")")
+	-- print(node.op..':'..tostring(node.l.v or node.l.op).."("..type(node.l.v)..")|"..tostring(node.r.v or node.r.op).."("..type(node.r.v)..")")
 	if node.op == '+' then -- binary operators
 		return (evaluate(node.l) + evaluate(node.r))
 	elseif node.op == '-' then
@@ -1083,7 +1083,7 @@ local function parseExpr(state, input)
 	local root = node
 	-- first call gets string input. rest uses tokenizer
 	if type(input) == "string" then
-		print('parse:' .. input) 
+		-- print('parse:' .. input) 
 		input = tokenizer(input, LCPP_TOKENIZE_EXPR) 
 	end
 	
@@ -1102,7 +1102,7 @@ local function parseExpr(state, input)
 			break
 		end
 		if type == "STRING_LITERAL" then
-			setValue(node, value:sub(value[1] == 'L' and 3 or 2,-2))
+			setValue(node, value:sub(2,-2))
 		end
 		if type == "NUMBER_LITERAL" or type == "HEX_LITERAL" or type == "FPNUM_LITERAL" or type == "CHAR_LITERAL" then
 			setValue(node, tonumber(parseCInteger(value)))
