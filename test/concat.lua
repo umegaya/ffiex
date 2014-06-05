@@ -23,4 +23,9 @@ typedef enum FT_Encoding_
  FT_ENCODING_OLD_LATIN_2 = ( ( (FT_UInt32)("l") << 24 ) | ( (FT_UInt32)("a") << 16 ) | ( (FT_UInt32)("t") << 8 ) | (FT_UInt32)("2") ),
  FT_ENCODING_APPLE_ROMAN = ( ( (FT_UInt32)("a") << 24 ) | ( (FT_UInt32)("r") << 16 ) | ( (FT_UInt32)("m") << 8 ) | (FT_UInt32)("n") )
 } FT_Encoding;
+int sprintf(char *buf, const char *format, ...); 
 ]]
+
+local p = ffi.new('FT_Encoding', "FT_ENCODING_GB2312")
+assert(p == 33686018, "invalid enum constant value:"..tostring(p))
+return true

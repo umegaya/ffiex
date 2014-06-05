@@ -280,6 +280,43 @@ local function _tokenizer(str, setup)
 		i1, i2 = str:find(pat,i)
 		return i1 ~= nil
 	end
+
+	local function find_string()
+		for strpat, strpat2 in pairs({
+			['^L?"[^"]*"'] = '^[^"]*"',
+			["^L?'[^']*'"] = "^[^']*'",
+		}) do
+			local _i1, _i2 = str:find(strpat,i)
+			if _i1 ~= nil then
+				local start_i = _i1
+				local _e = _i2 - 1
+				--> check last n byte is backslash
+				while _e > _i1 do
+					if str:byte(_e) ~= ("\\"):byte() then
+						break
+					end
+					_e = _e - 1
+				end
+				--> there is odd number of backslash at last of string?
+				while ((_i2 - _e - 1) % 2) == 1 do
+					--> has escaped quote in string.
+					--> keep on find actual termination of string
+					_i1, _i2 = str:find(strpat2, _i2 + 1)
+					--> print('trailed find:'..str:sub(start_i, _i2).."|"..tostring(_i2))
+					_e = _i2 - 1
+					while _e > _i1 do
+						if str:byte(_e) ~= ("\\"):byte() then
+							break
+						end
+						_e = _e - 1
+					end
+				end
+				i1, i2 = start_i, _i2
+				return true
+			end
+		end
+		return false
+	end
 	
 	local function cut()
 		return str:sub(i, i2)
@@ -291,7 +328,7 @@ local function _tokenizer(str, setup)
 			for _, name in ipairs(setup.keywords_order) do
 				assert(setup.keywords[name])
 				local pat = setup.keywords[name]
-				local result = find(pat)
+				local result = (name == "STRING_LITERAL" and find_string() or find(pat))
 				if result then
 					keyword = name 
 					return true 
@@ -301,7 +338,7 @@ local function _tokenizer(str, setup)
 	else
 		findKeyword = function ()
 			for name, pat in pairs(setup.keywords) do
-				local result = find(pat)
+				local result = (name == "STRING_LITERAL" and find_string() or find(pat))
 				if result then
 					keyword = name 
 					return true 
@@ -320,7 +357,7 @@ local function _tokenizer(str, setup)
 			coroutine.yield('number', tonumber(cut()), i1, i2)
 		elseif find(setup.identifier) then
 			coroutine.yield('identifier', cut(), i1, i2)
-		elseif setup.string and (find('^"[^"]*"') or find("^'[^']*'")) then
+		elseif setup.string and find_string() then
 			-- strip the quotes
 			coroutine.yield('string', cut():sub(2,-2), i1, i2)
 		else -- any other unknown character
@@ -341,28 +378,49 @@ end
 -- ------------
 -- C literal string concatenation
 local LCPP_TOKENIZE_LITERAL = {
-	string = false,
+	string = true,
 	keywords = { 
-		LITERAL = "^\""..STRING_LITERAL.."\"",
 	},
 }
 
 local function concatStringLiteral(input)
+	--print("input = "..input)
 	local out = {}
 	local literal_appears = {}
+	local last_ignore
+	local quote 
 	for k, v, start, end_ in tokenizer(input, LCPP_TOKENIZE_LITERAL) do
-		if k == "LITERAL" then
-			-- remove ""
+		if k == "string" then
+			--print("string:["..input:sub(start + 1, end_ - 1).."]")
 			table.insert(literal_appears, input:sub(start + 1, end_ - 1))
+			quote = input:sub(start,start)
+		elseif k == "ignore" then
+			if #literal_appears == 0 then
+				table.insert(out, input:sub(start, end_))
+			else
+				last_ignore = input:sub(start, end_)
+			end
 		else
 			if #literal_appears > 0 then
-				table.insert(out, "\""..table.concat(literal_appears, "").."\"")
+				local concat = quote..table.concat(literal_appears)..quote
+				table.insert(out, concat)
+				if last_ignore then
+					table.insert(out, last_ignore)
+				end
 			end
 			table.insert(out, input:sub(start, end_))
 			literal_appears = {}
+			last_ignore = nil
 		end
 	end
-	return table.concat(out)
+	if #literal_appears > 0 then
+		table.insert(out, quote..table.concat(literal_appears)..quote)
+	end
+	local rinput = table.concat(out)
+	--if rinput ~= input then
+	--	print("result:["..rinput.."]["..input.."]")
+	--end
+	return rinput
 end
 
 
@@ -395,8 +453,8 @@ end
 local LCPP_TOKENIZE_INTEGER = {
 	string = false,
 	keywords_order = {
-		"STRING_LITERAL",
 		"CHAR_LITERAL",
+		"STRING_LITERAL",
 		"HEX_LITERAL",
 		"BIN_LITERAL",
 		"OCT_LITERAL",
@@ -961,7 +1019,7 @@ evaluate = function (node)
 		end
 		return v
 	end
-	-- 	print(node.op..':'..tostring(node.l.v or node.l.op).."("..type(node.l.v)..")|"..tostring(node.r.v or node.r.op).."("..type(node.r.v)..")")
+	print(node.op..':'..tostring(node.l.v or node.l.op).."("..type(node.l.v)..")|"..tostring(node.r.v or node.r.op).."("..type(node.r.v)..")")
 	if node.op == '+' then -- binary operators
 		return (evaluate(node.l) + evaluate(node.r))
 	elseif node.op == '-' then
@@ -1025,7 +1083,7 @@ local function parseExpr(state, input)
 	local root = node
 	-- first call gets string input. rest uses tokenizer
 	if type(input) == "string" then
-		-- print('parse:' .. input) 
+		print('parse:' .. input) 
 		input = tokenizer(input, LCPP_TOKENIZE_EXPR) 
 	end
 	
@@ -1740,7 +1798,7 @@ function lcpp.test(suppressMsg)
 		assert(STRINGIFY_AND_CONCAT(fgh, ij) == "fghij", msg)
 
 		#define msg_concat(msg1, msg2) msg1 ## msg2
-		assert("I, am, lcpp" == msg_concat("I, am", ", lcpp"), "processing macro argument which includes ,")
+		assert("I, am\\\", lcpp\\\\" == msg_concat("I, am\\\"", ", lcpp\\\\"), "processing macro argument which includes ,")
 
 		#define FUNC__ARG 500
 		#define __ARG 100
@@ -1823,6 +1881,11 @@ function lcpp.test(suppressMsg)
 		#if (CALC_VALUE_B < CALC_VALUE_B)
 			assert(false, msg .. " < not work2")
 		#endif
+
+		msg = "process string literal which contains escaped \""
+		#define BUGGY_MACRO ("if string contains \", text here ignored")
+		assert(BUGGY_MACRO == "if string contains \", text here ignored", msg)
+		
 	]]
 	lcpp.FAST = false	-- enable full valid output for testing
 	lcpp.SELF_TEST = true
