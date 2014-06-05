@@ -128,6 +128,7 @@ local TEXT            = ".+"
 local STRINGIFY       = "#"
 local STRINGIFY_BYTE  = STRINGIFY:byte(1)
 local STRING_LITERAL  = ".*"
+local EXPRESSION      = ".*"
 
 -- BNF WORDS
 local _INCLUDE        = "include"
@@ -146,20 +147,20 @@ local _WARNING		  = "warning"
 local _PRAGMA         = "pragma"
 
 -- BNF RULES
-local INCLUDE         = STARTL.._INCLUDE..WHITESPACES.."[<]("..FILENAME..")[>]"..OPTSPACES..ENDL
-local LOCAL_INCLUDE   = STARTL.._INCLUDE..WHITESPACES.."[\"]("..FILENAME..")[\"]"..OPTSPACES..ENDL
-local INCLUDE_NEXT    = STARTL.._INCLUDE_NEXT..WHITESPACES.."[\"<]("..FILENAME..")[\">]"..OPTSPACES..ENDL
+local INCLUDE         = STARTL.._INCLUDE..OPTSPACES.."[<]("..FILENAME..")[>]"..OPTSPACES..ENDL
+local LOCAL_INCLUDE   = STARTL.._INCLUDE..OPTSPACES.."[\"]("..FILENAME..")[\"]"..OPTSPACES..ENDL
+local INCLUDE_NEXT    = STARTL.._INCLUDE_NEXT..OPTSPACES.."[\"<]("..FILENAME..")[\">]"..OPTSPACES..ENDL
 local DEFINE          = STARTL.._DEFINE
-local IFDEF           = STARTL.._IFDEF..WHITESPACES.."("..IDENTIFIER..")"..OPTSPACES..ENDL
-local IFNDEF          = STARTL.._IFNDEF..WHITESPACES.."("..IDENTIFIER..")"..OPTSPACES..ENDL
+local IFDEF           = STARTL.._IFDEF..OPTSPACES.."("..EXPRESSION..")"..OPTSPACES..ENDL
+local IFNDEF          = STARTL.._IFNDEF..OPTSPACES.."("..EXPRESSION..")"..OPTSPACES..ENDL
 local ENDIF           = STARTL.._ENDIF..OPTSPACES..ENDL
-local UNDEF           = STARTL.._UNDEF..WHITESPACES.."("..IDENTIFIER..")"..OPTSPACES..ENDL
-local IF              = STARTL.._IF..WHITESPACES.."(.*)"..ENDL
+local UNDEF           = STARTL.._UNDEF..OPTSPACES.."("..IDENTIFIER..")"..OPTSPACES..ENDL
+local IF              = STARTL.._IF..OPTSPACES.."("..EXPRESSION..")"..OPTSPACES..ENDL
 local ELSE            = STARTL.._ELSE..OPTSPACES..ENDL
-local ELIF            = STARTL.._ELIF..WHITESPACES.."(.*)"..ENDL
-local ELSEIF          = STARTL.._ELSE..WHITESPACES.._IF..WHITESPACES.."(.*)"..ENDL
-local ERROR           = STARTL.._ERROR..WHITESPACES.."("..TEXT..")"..OPTSPACES..ENDL
-local WARNING         = STARTL.._WARNING..WHITESPACES.."("..TEXT..")"..OPTSPACES..ENDL
+local ELIF            = STARTL.._ELIF..OPTSPACES.."(.*)"..ENDL
+local ELSEIF          = STARTL.._ELSE..WHITESPACES.._IF..OPTSPACES.."(.*)"..ENDL
+local ERROR           = STARTL.._ERROR..OPTSPACES.."("..TEXT..")"..OPTSPACES..ENDL
+local WARNING         = STARTL.._WARNING..OPTSPACES.."("..TEXT..")"..OPTSPACES..ENDL
 local ERROR_NOTEXT    = STARTL.._ERROR..OPTSPACES..ENDL	--> not required when we have POSIX regex
 local PRAGMA          = STARTL.._PRAGMA
 
@@ -622,6 +623,7 @@ local function processLine(state, line)
 
 	--[[ IF/THEN/ELSE STRUCTURAL BLOCKS ]]--
 	if cmd then
+		--[[
 		local ifdef   = cmd:match(IFDEF)
 		local ifexp   = cmd:match(IF)
 		local ifndef  = cmd:match(IFNDEF)
@@ -630,18 +632,32 @@ local function processLine(state, line)
 		local else_   = cmd:match(ELSE)
 		local endif   = cmd:match(ENDIF)
 		local struct  = ifdef or ifexp or ifndef or elif or elseif_ or else_ or endif
-		
-		if struct then 
-			local skip = state:skip()
-			if ifdef   then state:openBlock(state:defined(ifdef))      end
-			-- if skipped, it may have undefined expression. so not parse them
-			if ifexp   then state:openBlock(skip and true or CBoolean(state:parseExpr(ifexp)))    end
-			if ifndef  then state:openBlock(not state:defined(ifndef)) end
-			if elif    then state:elseBlock((skip and skip < #state.stack) and true or CBoolean(state:parseExpr(elif)))     end
-			if elseif_ then state:elseBlock((skip and skip < #state.stack) and true or CBoolean(state:parseExpr(elseif_)))  end
-			if else_   then state:elseBlock(true)                      end
-			if endif   then state:closeBlock()                         end
-			return -- remove structural directives
+		]]
+
+		local dmap = {
+			["ifdef"] = IFDEF,
+			["ifexp"] = IF,
+			["ifndef"] = IFNDEF,
+			["elif"] = ELIF,
+			["elseif"] = ELSEIF,
+			["else"] = ELSE,
+			["endif"] = ENDIF,
+		}
+		for _,d in ipairs({"ifdef","ifndef","ifexp","elif","elseif","else","endif"}) do
+			local m = cmd:match(dmap[d])
+			if m then
+			--print("match|"..d.."|"..tostring(dmap[d]))
+				local skip = state:skip()
+				if d == "ifdef"   then state:openBlock(state:defined(m))      end
+				-- if skipped, it may have undefined expression. so not parse them
+				if d == "ifexp"   then state:openBlock(skip and true or CBoolean(state:parseExpr(m)))    end
+				if d == "ifndef"  then state:openBlock(not state:defined(m)) end
+				if d == "elif"    then state:elseBlock((skip and skip < #state.stack) and true or CBoolean(state:parseExpr(m)))     end
+				if d == "elseif"  then state:elseBlock((skip and skip < #state.stack) and true or CBoolean(state:parseExpr(m)))  end
+				if d == "else"    then state:elseBlock(true)                      end
+				if d == "endif"   then state:closeBlock()                         end
+				return -- remove structural directives
+			end
 		end
 	end
 
