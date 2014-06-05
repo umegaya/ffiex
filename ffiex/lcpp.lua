@@ -234,12 +234,6 @@ local function findn(input, what)
 	end
 end
 
--- C literal string concatenation
-local function concatStringLiteral(input)
-	-- screener does remove multiline definition, so just check ".*"%s*".*" pattern
-	return input:gsub("\"("..STRING_LITERAL..")\""..OPTSPACES.."\"("..STRING_LITERAL..")\"", "\"%1%2\"")
-end
-
 -- c style boolean check (thus, 0 will be false)
 local function CBoolean(value)
 	return value and (value ~= 0)
@@ -345,6 +339,32 @@ end
 -- ------------
 -- PARSER
 -- ------------
+-- C literal string concatenation
+local LCPP_TOKENIZE_LITERAL = {
+	string = false,
+	keywords = { 
+		LITERAL = "^\""..STRING_LITERAL.."\"",
+	},
+}
+
+local function concatStringLiteral(input)
+	local out = {}
+	local literal_appears = {}
+	for k, v, start, end_ in tokenizer(input, LCPP_TOKENIZE_LITERAL) do
+		if k == "LITERAL" then
+			-- remove ""
+			table.insert(literal_appears, input:sub(start + 1, end_ - 1))
+		else
+			if #literal_appears > 0 then
+				table.insert(out, "\""..table.concat(literal_appears, "").."\"")
+			end
+			table.insert(out, input:sub(start, end_))
+			literal_appears = {}
+		end
+	end
+	return table.concat(out)
+end
+
 
 local LCPP_TOKENIZE_COMMENT = {
 	string = false,
@@ -479,7 +499,7 @@ local function apply(state, input)
 		local expand
 
 		for k, v, start, end_ in tokenizer(input, LCPP_TOKENIZE_APPLY_MACRO) do
-			-- print('tokenize:'..tostring(k).."|"..tostring(v))
+			-- print('tokenize:'..tostring(k).."["..tostring(v).."]")
 			if k == "identifier" then 
 				local repl = v
 				local macro = state.defines[v] 
@@ -531,6 +551,7 @@ local function apply(state, input)
 	end
 
 	-- C liberal string concatenation, processing U,L,UL,LL
+	-- print('input ==> ' .. input .. "|#####|" .. concatStringLiteral(input))
 	return parseCInteger(concatStringLiteral(input)),false
 end
 
