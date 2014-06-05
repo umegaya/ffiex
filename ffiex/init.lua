@@ -48,13 +48,18 @@ local function search_header_file(filename, predefines, nxt, _local)
 			end
 		end
 	end
-	print('not found:' .. filename)
+	--> OMG header not found...
+	local paths = ""
+	for _,path in ipairs(currentState.searchPath) do
+		paths = paths .. "\n" .. path
+	end
+	error(filename .. ' not found in:' .. paths)
 	return nil
 end
 
 lcpp.compileFile = function (filename, predefines, macro_sources, nxt, _local)
 	filename, lastTryPath = search_header_file(filename, predefines, nxt, _local)
-	-- print('include:'..filename)
+	-- print('include:'..filename)	
 	return originalCompileFile(filename, predefines, macro_sources, nxt)
 end
 
@@ -252,6 +257,9 @@ function ffi_state:parse(decl)
 end
 function ffi_state:cdef(decl)
 	local output = self:parse(decl)
+	local f = io.open('./tmp.txt', 'w')
+	f:write(output)
+	f:close()
 	ffi.lcpp_cdef_backup(output)
 end
 function ffi_state:define(defs)
