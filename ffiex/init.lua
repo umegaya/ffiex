@@ -53,7 +53,7 @@ local function search_header_file(filename, predefines, nxt, _local)
 	for _,path in ipairs(currentState.searchPath) do
 		paths = paths .. "\n" .. path
 	end
-	error(filename .. ' not found in:' .. paths)
+	error(filename .. ' not found in:' .. paths .. "\n at \n" .. debug.traceback())
 	return nil
 end
 
@@ -234,11 +234,9 @@ function importer_lib.new(state, sym)
 	return setmetatable({state = state, sym = sym}, { __index = importer_lib})
 end
 function importer_lib:from(code)
-	self.state:parse(code)
+	local tree = self.state:parse(code)
 	
-	local injected = parser_lib.inject(self.state.tree, self.sym)
-	-- print('injected source:[['..injected..']]')
-	ffi.lcpp_cdef_backup(injected)
+	return ffi.native_cdef_with_guard(tree, self.sym)
 end
 
 function ffi_state:import(sym)
@@ -253,16 +251,11 @@ function ffi_state:parse(decl)
 	self.lcpp_defs = state.defines
 	self.lcpp_macro_sources = state.macro_sources
 	self.tree = parser_lib.parse(self.tree, output)
-	return output
+	return self.tree, output
 end
 function ffi_state:cdef(decl)
-	local output = self:parse(decl)
-	if ffi.__DEBUG_CDEF__ then
-		local f = io.open('./tmp.txt', 'w')
-		f:write(output)
-		f:close()
-	end
-	ffi.lcpp_cdef_backup(output)
+	local tree, output = self:parse(decl)
+	ffi.native_cdef_with_guard(tree, output)
 end
 function ffi_state:define(defs)
 	for k,v in pairs(defs) do
@@ -451,7 +444,7 @@ end
 function ffi_state:src_of(symbol, recursive)
 	symbol = parser_lib.name(self.tree, symbol)
 	return recursive and 
-		parser_lib.inject({symbol}) or 
+		parser_lib.inject(self.tree, {symbol}) or 
 		assert(self.tree[symbol], "no such symbol:"..symbol).cdef
 end
 
@@ -460,6 +453,31 @@ end
 -----------------------
 -- ffiex module
 -----------------------
+-- already imported symbols (and guard them from dupe)
+ffi.imported_csymbols = {}
+function ffi.native_cdef_with_guard(tree, symbols_or_ppcode)
+	local injected 
+	if type(symbols_or_ppcode) == 'table' then
+		injected = parser_lib.inject(tree, symbols_or_ppcode, ffi.imported_csymbols)
+	elseif type(symbols_or_ppcode) == 'string' then
+		-- just traverse and import all symbol in tree
+		-- because preprocessed code already sorted for dependency,
+		-- which is little trouble some with using tree.
+		parser_lib.inject(tree, nil, ffi.imported_csymbols)
+		injected = symbols_or_ppcode
+	else
+		assert('invalid 2nd argument:'..type(symbols_or_ppcode))
+	end
+	if ffi.__DEBUG_CDEF__ then
+		print('injected source:[['..injected..']]')
+		local f = io.open('./tmp.txt', 'w')
+		f:write(injected)
+		f:close()
+	end
+	ffi.lcpp_cdef_backup(injected)
+	return injected
+end
+
 -- wrappers of ffi_state object.
 local main_ffi_state = ffi_state.new(true)
 ffi.main_ffi_state = main_ffi_state

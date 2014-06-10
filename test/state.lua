@@ -15,6 +15,9 @@ assert(nil == ffi.defs.FOO, "FOO should not exist:"..tostring(ffi.defs.FOO))
 -- able to define another macro FOO
 local src_fdecl = state:src_of("no_return_fn")
 assert(src_fdecl:gsub("%s", "") == fdecl:gsub("%s", ""), "invalid src_of:["..src_fdecl.."]")
+local src_fdecl2 = state:src_of("no_return_fn", true)
+assert(src_fdecl2:gsub("%s", "") == fdecl:gsub("%s", ""), "invalid src_of:["..src_fdecl2.."]")
+
 ffi.cdef[[
 #define FOO(x) (x + 10)
 ]]

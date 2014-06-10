@@ -1,6 +1,8 @@
 local ffi = require 'ffiex.init'
 
 local state = ffi.newstate()
+-- ffi need to configure for loading tcc header and lib
+ffi.path "./test/myheaders/tcc"
 state:copt { cc = "tcc" }
 state:cdef [[
 //complement missing definition
