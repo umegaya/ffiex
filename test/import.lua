@@ -1,4 +1,6 @@
 local ffi = require 'ffiex.init'
+--ffi.__DEBUG_CDEF__ = true
+
 ffi.import({
 "printf",
 "sprintf",

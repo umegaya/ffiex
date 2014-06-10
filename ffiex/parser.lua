@@ -783,7 +783,7 @@ local function parse(tree, code)
 end
 
 local function traverse_cdef(tree, symbol, injected, depth)
-	local sym = assert(tree[symbol], "cdef not found:"..symbol)
+	local sym = assert(tree[symbol], "cdef not found:["..symbol.."]")
 	assert(#sym.name > 0, "invalid sym:"..sym.name)
 	for _,dep in ipairs(sym.deps or {}) do
 		if not injected.lookup[dep] then
@@ -799,7 +799,8 @@ local function traverse_cdef(tree, symbol, injected, depth)
 	if not injected.lookup[symbol] then
 		injected.lookup[symbol] = true
 		-- it is possible that multiple symbols defined in same cdef
-		-- de-dupe that
+		-- eg) typedef struct A {...} B; >> A and B is declared at the same time, 
+		-- so has same cdef. de-dupe that
 		if not injected.chunks[sym.cdef] then
 			injected.chunks[sym.cdef] = true
 			table.insert(injected.list, sym)
@@ -810,7 +811,7 @@ end
 local function get_name_in_sym(tree, symbol)
 	local s, e = symbol:find('%s+')
 	if s then
-		local pfx = symbol:sub(1, s)
+		local pfx = symbol:sub(1, s - 1)
 		return pfx == "func" and symbol or symbol:sub(e+1)
 	else
 		local fsym = get_func_sym_name(symbol)
@@ -818,15 +819,21 @@ local function get_name_in_sym(tree, symbol)
 	end
 end
 
-local function inject(tree, symbols)
+local function inject(tree, symbols, already_imported)
 	local injected = {
-		lookup = {},
+		lookup = already_imported or {},
 		list = {},
 		seen = {},
 		chunks = {},
 	}
-	for _,symbol in ipairs(symbols) do
-		traverse_cdef(tree, get_name_in_sym(tree, symbol), injected, 0)
+	if symbols then
+		for _,symbol in ipairs(symbols) do
+			traverse_cdef(tree, get_name_in_sym(tree, symbol), injected, 0)
+		end
+	else
+		for k,v in pairs(tree) do
+			traverse_cdef(tree, k, injected, 0)
+		end
 	end
 	local cdef = ""
 	for _,sym in ipairs(injected.list) do
