@@ -257,9 +257,11 @@ function ffi_state:parse(decl)
 end
 function ffi_state:cdef(decl)
 	local output = self:parse(decl)
-	local f = io.open('./tmp.txt', 'w')
-	f:write(output)
-	f:close()
+	if ffi.__DEBUG_CDEF__ then
+		local f = io.open('./tmp.txt', 'w')
+		f:write(output)
+		f:close()
+	end
 	ffi.lcpp_cdef_backup(output)
 end
 function ffi_state:define(defs)
