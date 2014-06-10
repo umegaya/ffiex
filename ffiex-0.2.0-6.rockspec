@@ -1,5 +1,5 @@
 package = "ffiex"
-version = "0.2.0-5"
+version = "0.2.0-6"
 source = {
   url = "git://github.com/umegaya/ffiex.git",
 }
