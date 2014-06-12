@@ -9,9 +9,9 @@ s2:copt { cc = "gcc" }
 s1:import({"nanosleep"}):from [[
 	#include <time.h>
 ]]
-assert(ffi.imported_csymbols["timespec"], "timespec not imported")
+assert(ffi.imported_csymbols["struct timespec"], "timespec not imported")
 if ffi.os == "OSX" then
-	s2:import({"kevent"}):from [[
+	s2:import({"func kevent"}):from [[
 		#include <sys/types.h>
 		#include <sys/time.h>
 		#include <sys/event.h>
@@ -27,5 +27,11 @@ assert(ffi.C.nanosleep)
 local rt = ffi.load("rt")
 assert(rt.clock_gettime)
 end
+
+ffi.cdef [[
+#include <time.h>
+]]
+
+assert(ffi.C.time)
 
 return true

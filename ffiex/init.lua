@@ -59,7 +59,7 @@ end
 
 lcpp.compileFile = function (filename, predefines, macro_sources, nxt, _local)
 	filename, lastTryPath = search_header_file(filename, predefines, nxt, _local)
-	-- print('include:'..filename)	
+	--> print('include:'..filename)	
 	return originalCompileFile(filename, predefines, macro_sources, nxt)
 end
 
@@ -107,18 +107,19 @@ local function generate_cdefs(state, code)
 	local decl = ""
 	repeat
 		local _, offset = string.find(code, '\n', current+1, true)
-		local line = code:sub(current+1, offset)
+		local line = code:sub(current+1, offset):gsub('%b{}', '')
+		-- print('line = '..line)
 		-- matching simple function declaration (e.g. void foo(t1 a1, t2 a2))
-		local _, count = line:gsub('^%s*([_%a][_%w]*%s+[_%a][_%w]*%b())%s*%b{}', function (s)
-			--print(s)
+		local _, count = line:gsub('^%s*([_%a][_%w]*%s+[_%a][_%w]*%b())%s*', function (s)
+			-- print(s)
 			decl = (decl .. "extern " .. s .. ";\n")
 		end)
 		-- matching function declaration with access specifier 
 		-- (e.g. extern void foo(t1 a1, t2 a2), static void bar())
 		-- and not export function declaration contains 'static' specifier
 		if count <= 0 then
-			line:gsub('(.*)%s+([_%a][_%w]*%s+[_%a][_%w]*%b())%s*%b{}', function (s1, s2)
-				--print(s1 .. "|" .. s2)
+			line:gsub('(.*)%s+([_%a][_%w]*%s+[_%a][_%w]*%b())%s*', function (s1, s2)
+				-- print(s1 .. "|" .. s2)
 				if not s1:find('static') then
 					decl = (decl .. "extern " .. s2 .. ";\n")
 				end
@@ -126,8 +127,9 @@ local function generate_cdefs(state, code)
 		end
 		current = offset
 	until not current
+	-- print('code = ['..code..']')
 	if #decl > 0 then
-		-- print('decl = ' .. decl)
+		-- print('decl = [' .. decl..']')
 		state:cdef(decl)
 	end
 end
@@ -431,7 +433,7 @@ function ffi_state:csrc(name, src, opts)
 			-- os.remove(path)
 			return lib,ext
 		else
-			--	os.remove(path)
+			-- os.remove(path)
 			return nil,lib
 		end
 	else
@@ -456,18 +458,7 @@ end
 -- already imported symbols (and guard them from dupe)
 ffi.imported_csymbols = {}
 function ffi.native_cdef_with_guard(tree, symbols_or_ppcode)
-	local injected 
-	if type(symbols_or_ppcode) == 'table' then
-		injected = parser_lib.inject(tree, symbols_or_ppcode, ffi.imported_csymbols)
-	elseif type(symbols_or_ppcode) == 'string' then
-		-- just traverse and import all symbol in tree
-		-- because preprocessed code already sorted for dependency,
-		-- which is little trouble some with using tree.
-		parser_lib.inject(tree, nil, ffi.imported_csymbols)
-		injected = symbols_or_ppcode
-	else
-		assert('invalid 2nd argument:'..type(symbols_or_ppcode))
-	end
+	local injected = parser_lib.inject(tree, symbols_or_ppcode, ffi.imported_csymbols)
 	if ffi.__DEBUG_CDEF__ then
 		print('injected source:[['..injected..']]')
 		local f = io.open('./tmp.txt', 'w')

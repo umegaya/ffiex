@@ -1,6 +1,7 @@
 local parser = require 'ffiex.parser'
 
 local function check_dependency(sym, typename, deps, cdef_checker)
+	typename = parser.name(sym, typename)
 	local t = assert(sym[typename], typename .. " not exist")
 	for i,d in ipairs(deps) do
 		local found
@@ -27,7 +28,8 @@ check_dependency(sym, "test1_a_t", {"unsigned int"})
 check_dependency(sym, "test1_b_t", {"unsigned int"})
 check_dependency(sym, "test1_c_t", {"unsigned long long int"})
 check_dependency(sym, "test1_d_t", {"unsigned long long int"})
-check_dependency(sym, "test1_e_t", {"int"})
+check_dependency(sym, "struct test1_e_t", {"int"})
+check_dependency(sym, "typename test1_e_t", {"struct test1_e_t"})
 check_dependency(sym, "integer_t", {"int"})
 
 
@@ -45,8 +47,8 @@ sym = parser.parse(nil, [[
  } test2_b_t;
 ]])
 check_dependency(sym, "_test2_a_t", {"long int", "void", "char"})
-check_dependency(sym, "test2_a_t", {"_test2_a_t"})
-check_dependency(sym, "test2_b_t", {"_test2_b_t"})
+check_dependency(sym, "test2_a_t", {"struct _test2_a_t"})
+check_dependency(sym, "test2_b_t", {"enum _test2_b_t"})
 
 
 -- test3
@@ -93,8 +95,8 @@ check_dependency(sym, "func test5_b_fn", {"int", "char", "short int", "void", "u
 	return cdef:find("__asm%(hoge%)")
 end)
 check_dependency(sym, "_test5_a_t", {"void"})
-check_dependency(sym, "test5_a_t", {"_test5_a_t"})
-check_dependency(sym, "func test5_c_fn", {"_test5_a_t", "test5_a_t"})
+check_dependency(sym, "test5_a_t", {"struct _test5_a_t"})
+check_dependency(sym, "func test5_c_fn", {"struct _test5_a_t", "test5_a_t"})
 check_dependency(sym, "func test5_d_fn", {"void", "int"}, function (cdef)
 	return cdef:find('__declspec%(dllimport%)')
 end)
@@ -121,7 +123,7 @@ typedef struct {
 ]])
 check_dependency(sym, "test6_a_t", {"void", "int"})
 check_dependency(sym, "test6_b_t", {"test6_a_t"})
-check_dependency(sym, "test6_c_t", {"test6_a_t", "test6_b_t", "int", "char", "long int", "test6_d_t"})
+check_dependency(sym, "test6_c_t", {"test6_a_t", "test6_b_t", "int", "char", "long int", "struct test6_d_t"})
 check_dependency(sym, "test6_d_t", {})
 
 return true
