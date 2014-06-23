@@ -244,7 +244,7 @@ end
 function ffi_state:import(sym)
 	return importer_lib.new(self, sym)
 end
-function ffi_state:parse(decl)
+function ffi_state:parse(decl, tmptree)
 	if not parser_lib then
 		parser_lib = require 'ffiex.parser'
 	end
@@ -252,12 +252,23 @@ function ffi_state:parse(decl)
 	local output, state = lcpp.compile(decl, self.lcpp_defs, self.lcpp_macro_sources)
 	self.lcpp_defs = state.defines
 	self.lcpp_macro_sources = state.macro_sources
-	self.tree = parser_lib.parse(self.tree, output)
-	return self.tree, output
+	if tmptree and self.tree then
+		tmptree = parser_lib.parse(nil, output)
+		for _,sym in pairs(tmptree[1]) do
+			table.insert(self.tree[1], sym)
+		end
+		for k,v in pairs(tmptree) do
+			if not self.tree[k] then self.tree[k] = tmptree[k] end
+		end
+		return tmptree, output
+	else
+		self.tree = parser_lib.parse(self.tree, output)
+		return self.tree, output
+	end
 end
 function ffi_state:cdef(decl)
-	local tree, output = self:parse(decl)
-	ffi.native_cdef_with_guard(tree, output)
+	local tmp = self:parse(decl, true)
+	ffi.native_cdef_with_guard(tmp, nil)
 end
 function ffi_state:define(defs)
 	for k,v in pairs(defs) do
