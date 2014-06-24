@@ -1217,11 +1217,14 @@ local function parseExpr(state, input)
 		elseif type == "identifier" or type == "FUNCTIONAL_MACRO" then
 			-- print('ident:' .. value)
 			local eval = state:apply(value)
-			-- print('apply result ' .. eval .. "|" .. tostring(unprocessed))
+			-- print('apply result ' .. eval)
 			if eval ~= value then
 				eval = state:parseExpr(eval)
 				-- print('re-evaluate expr ' .. tostring(eval))
 				setValue(node, eval)
+			elseif state:defined(value) then
+				-- print('same value but defined:no change!!', value)
+				setValue(node, value)
 			else
 				-- undefined macro symbol is always treated as 0.
 				-- http://gcc.gnu.org/onlinedocs/cpp/If.html#If
