@@ -465,11 +465,11 @@ local LCPP_TOKENIZE_INTEGER = {
 	keywords = { 
 		STRING_LITERAL = '^"[^"]*"',
 		CHAR_LITERAL = "^L'.*'",
-		HEX_LITERAL = '^[%+%-]?%s*0x[a-fA-F%d]+[UL]*',
-		BIN_LITERAL = '^[%+%-]?%s*0b%d+[UL]*',
-		OCT_LITERAL = '^[%+%-]?%s*0%d+[UL]*',
+		HEX_LITERAL = '^[%+%-%~]?%s*0x[a-fA-F%d]+[uUlL]*',
+		BIN_LITERAL = '^[%+%-%~]?%s*0b%d+[uUlL]*',
+		OCT_LITERAL = '^[%+%-%~]?%s*0%d+[uUlL]*',
 		FPNUM_LITERAL = '^[%+%-]?%s*%d+[%.]?%d*e[%+%-]%d*',
-		NUMBER_LITERAL = '^[%+%-]?%s*%d+[%.]?%d*[UL]+',
+		NUMBER_LITERAL = '^[%+%-%~]?%s*%d+[%.]?%d*[uUlL]+',
 	},
 }
 local function parseCInteger(input)
@@ -477,25 +477,30 @@ local function parseCInteger(input)
 	local out = {}
 	for k, v, start, end_ in tokenizer(input, LCPP_TOKENIZE_INTEGER) do
 	-- print('parseCInteger:' .. k .. "|" .. v)
+		local unary, n
 		if k == "CHAR_LITERAL" then
 			table.insert(out, tostring(string.byte(loadstring("return \"" .. v:gsub("^L%'(.+)%'", "%1") .. "\"")())))
 		elseif k == "HEX_LITERAL" then 
-			unary, v = v:match('([%+%-]?)0x([a-fA-F%d]+)[UL]*')
-			local n = tonumber(v, 16)
-			table.insert(out, unary..tostring(n))
+			unary, v = v:match('([%+%-%~]?)0x([a-fA-F%d]+)[uUlL]*')
+			n = tonumber(v, 16)
 		elseif k == "NUMBER_LITERAL" then 
-			v = v:match('([^UL]+)[UL]+')
-			table.insert(out, v)
+			unary, v = v:match('([%+%-%~]?)([^uUlL]+)[uUlL]+')
+			n = v
 		elseif k == "BIN_LITERAL" then 
-			unary, v = v:match('([%+%-]?)0b([01]+)[UL]*')
-			local n = tonumber(v, 2)
-			table.insert(out, unary..tostring(n))
+			unary, v = v:match('([%+%-%~]?)0b([01]+)[uUlL]*')
+			n = tonumber(v, 2)
 		elseif k == "OCT_LITERAL" then 
-			unary, v = v:match('([%+%-]?)(0%d+)[UL]*')
-			local n = tonumber(v, 8)
-			table.insert(out, unary..tostring(n))
+			unary, v = v:match('([%+%-%~]?)(0%d+)[uUlL]*')
+			n = tonumber(v, 8)
 		else
 			table.insert(out, input:sub(start, end_))
+		end
+		if unary then
+			if unary == '~' then
+				table.insert(out, tostring(bit.bnot(n)))
+			else
+				table.insert(out, unary..tostring(n))
+			end
 		end
 	end
 	local str = table.concat(out)
@@ -927,9 +932,9 @@ local LCPP_TOKENIZE_EXPR = {
 
 		CHAR_LITERAL = "^L?'.*'",
 		STRING_LITERAL = '^L?"[^"]*"',
-		HEX_LITERAL = '^[%+%-]?0?x[a-fA-F%d]+[UL]*',
+		HEX_LITERAL = '^[%+%-]?0?x[a-fA-F%d]+[uUlL]*',
 		FPNUM_LITERAL = '^[%+%-]?%d+[%.]?%d*e[%+%-]%d*',
-		NUMBER_LITERAL = '^[%+%-]?0?b?%d+[%.]?%d*[UL]*',
+		NUMBER_LITERAL = '^[%+%-]?0?b?%d+[%.]?%d*[uUlL]*',
 	},
 }
 
@@ -1021,7 +1026,7 @@ evaluate = function (node)
 		local v = node.v
 		if node.uops then
 			for _, uop in ipairs(node.uops) do
-				-- print('apply uop:'..uop.."|"..tostring(v))
+			-- print('apply uop:'..uop.."|"..tostring(v))
 				if uop == '-' then
 					v = -v
 				elseif uop == '!' then
@@ -1501,6 +1506,9 @@ function lcpp.test(suppressMsg)
 		#pragma ignored
 		assert __P((BINARY == -9, "parse, binary literal fails"))
 		assert(OCTET == 61 and NON_OCTET == 75, "parse octet literal fails")
+
+		#define BNOT_ZERO (~0ull)
+		assert(BNOT_ZERO == -1, "bnot for integer literal")
 	
 		lcpp_test.assertTrue()
 		assert(LEET == 0x1337, "simple #define replacement")
