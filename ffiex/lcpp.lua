@@ -566,7 +566,8 @@ local function apply(state, input)
 			-- print('tokenize:'..tostring(k).."["..tostring(v).."]")
 			if k == "identifier" then 
 				local repl = v
-				local macro = state.defines[v] 
+				local macro = state.defines[v]
+				-- print(tostring(state.defines)..' tokenize:'..tostring(v).."=>"..tostring(macro))
 				if macro then
 					if type(macro)     == "boolean" then
 						repl = ""
@@ -794,7 +795,7 @@ end
 
 -- sets a global define
 local function define(state, key, value, override, macro_source)
-	--print("define:"..key.." type:"..tostring(value).." value:"..tostring(pval))
+	-- print(tostring(state.defines).." define:"..key.." value:"..tostring(value).." src:"..tostring(state.macro_sources[key]))
 	if value and not override then
 		if type(value) == 'function' then
 			assert(macro_source, "macro source should specify to check identity")
@@ -1109,7 +1110,7 @@ local function parseExpr(state, input)
 	end
 	
 	for type, value in input do
-		-- print("type:"..type.." value:"..value)
+	-- print("type:"..type.." value:"..value)
 		-- unary operator
 		if type == "NOT" or 
 			type == "BNOT" then

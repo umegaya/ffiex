@@ -90,13 +90,20 @@ local function replace_table(src, rep)
 	end
 end
 
-local function macro_to_lua_func(macro_source)
+local function macro_to_lua_func(st, macro_source)
 	return function (...)
 		local args = {...}
-		local src = "return " .. macro_source:gsub("%$(%d+)", function (m) return args[tonumber(m)] end)
-		local ok, r = pcall(loadstring, src)
-		if not ok then error(r) end
-		return r()
+		local state = st:expr_processor()
+		local src = macro_source:gsub("%$(%d+)", function (m) return args[tonumber(m)] end)
+		local val = state:parseExpr(src)
+		-- print(val, src)
+		if type(val) ~= 'string' then
+			return val
+		else -- more parse with lua lexer
+			local f, err = loadstring("return "..val)
+			if not f then error(err) end
+			return f()
+		end
 	end
 end
 
@@ -188,19 +195,27 @@ local defs_mt = {
 				return rawget(t, k)
 			end
 		elseif type(def) == 'string' then
-			local state = lcpp.init('', st.lcpp_defs, st.lcpp_macro_sources)
+			local state = st:expr_processor()
 			local expr = state:parseExpr(def)
 			rawset(t, k, expr)
 			return rawget(t, k)
 		elseif type(def) == 'function' then
 			def = st.lcpp_macro_sources[k]
 			if not def then return nil end
-			def = macro_to_lua_func(def)
+			def = macro_to_lua_func(st, def)
 		end
 		rawset(t, k, def)
 		return def
 	end
 }
+function ffi_state:expr_processor()
+	if not self.processor then
+		self.processor = lcpp.init('', {}, {})
+	end
+	self.processor.defines = self.lcpp_defs
+	self.processor.macro_sources = self.lcpp_macro_sources
+	return self.processor
+end
 function ffi_state:init(try_init_path)
 	self.defs = setmetatable({ ["#state"] = self }, defs_mt)
 	self.searchPath = {"./"}
