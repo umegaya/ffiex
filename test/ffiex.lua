@@ -1,4 +1,5 @@
 local ffi = require 'ffiex.init'
+ffi.__DEBUG_CDEF__ = true
 
 local pt
 if ffi.os == 'OSX' then

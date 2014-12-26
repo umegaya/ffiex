@@ -532,5 +532,8 @@ end
 function ffi.newstate()
 	return ffi_state.new()
 end
+function ffi.init_cdef_cache()
+	utils.create_builtin_config_cache()
+end
 
 return ffi
