@@ -245,16 +245,22 @@ function ffi_state:init(try_init_path)
 	-- if gcc is available, try using it for initial builder.
 	if try_init_path then
 		local ok, rv = pcall(os.execute, "gcc -v 2>/dev/null")
-		if ok and (rv == 0) then
+		if ok then
+			local has_gcc = (rv == 0)
 			ok, rv = pcall(require, 'ffiex.builder.gcc')
 			if ok and rv then
 				local builder = rv.new()
-				builder:init(self)
-				self.builder = builder
-				self:copt({ cc = "gcc" })
-			else
-				print('gcc available but fail to initialize gcc builder:'..rv)
+				if has_gcc then
+					builder:init(self)
+					self.builder = builder
+					self:copt({ cc = "gcc" })
+				else
+					ok, rv = pcall(builder.init, builder, self)
+				end
 			end
+		end
+		if not ok then
+			print('gcc available but fail to initialize gcc builder:'..rv)
 		end
 	end
 end
@@ -548,7 +554,10 @@ function ffi.newstate()
 	return ffi_state.new()
 end
 function ffi.init_cdef_cache()
-	utils.create_builtin_config_cache()
+	(require 'ffiex.util').create_builtin_config_cache()
+end
+function ffi.clear_cdef_cache()
+	(require 'ffiex.util').clear_builtin_config_cache()
 end
 
 return ffi

@@ -1,41 +1,64 @@
 local _M = {}
 local ffi = require 'ffi'
 
-function _M.get_gcc_version()
-	return io.popen('gcc -v'):read('*a')
+if ffi.os == "Windows" then
+	_M.PATH_SEPS = "¥"
+else
+	_M.PATH_SEPS = "/"
 end
 function _M.file_exists(file)
 	if ffi.os ~= 'Windows' then
-		return io.popen([[if [ -e '%s' ]; then echo '1'; else echo '0'; fi]]):read('*a') == '1'
+		return io.popen(([[if [ -e '%s' ]; then echo '1'; else echo '0'; fi]]):format(file)):read(1) == '1'
 	else
 		error('unsupported OS')
 	end
 end
 function _M.current_path()
 	local data = debug.getinfo(1)
-	return data.source:match('@(.+)/.+$')
+	return data.source:match('@(.+)'.._M.PATH_SEPS..'.+$')
 end
-local builtin_paths = (_M.current_path()..'/cache/builtin_paths')
-local builtin_defs = (_M.current_path()..'/cache/builtin_defs')
+local cache_dir = _M.current_path().._M.PATH_SEPS..'cache'
+local version_file = cache_dir.._M.PATH_SEPS..'version'
+local builtin_paths = cache_dir.._M.PATH_SEPS..'builtin_paths'
+local builtin_defs = cache_dir.._M.PATH_SEPS..'builtin_defs'
+_M.path = {
+	version_file = version_file,
+	builtin_paths = builtin_paths,
+	builtin_defs = builtin_defs,
+}
+
+-- gcc version cache
+function _M.gcc_version()
+	local r = io.popen('which gcc'):read('*a')
+	return #r > 0 and io.popen('gcc -v 2>&1'):read('*a') or nil
+end
+local function create_version_file_cache(v)
+	v = v or _M.gcc_version()
+	assert(v, "gcc need to be installed to create cache")
+	local f = io.open(version_file, 'w')
+	f:write(v)
+	f:close()
+end
 
 -- add compiler predefinition
 local builtin_defs_cmd = 'echo | gcc -E -dM -'
 local function create_builtin_defs_cache()
-	os.execute('echo "'..v..'">'..builtin_defs..".version")
-	os.execute(builtin_defs_cmd..'>>'..builtin_defs)
+	assert(_M.gcc_version(), "gcc need to be installed to create cache")
+	os.execute(builtin_defs_cmd..'>'..builtin_defs)
 end
-local function get_builtin_defs()
-	if _M.file_exists(builtin_defs) then
-		local v = _M.get_gcc_version()
-		if v ~= io.popen(('cat %s'):format(builtin_defs..".version")):read('*a') then
+function _M.builtin_defs()
+	if _M.file_exists(version_file) then
+		local v = _M.gcc_version()
+		if v and (v ~= io.popen(('cat %s'):format(version_file)):read('*a')) then
 			create_builtin_defs_cache()
+			create_version_file_cache(v)
 		end
 		return io.popen(([[cat %s]]):format(builtin_defs))
 	end
 	return io.popen(builtin_defs_cmd)
 end
 function _M.add_builtin_defs(state)
-	local p = get_builtin_defs()
+	local p = _M.builtin_defs()
 	local predefs = p:read('*a')
 	state:cdef(predefs)
 	p:close()
@@ -66,24 +89,23 @@ end
 
 -- add compiler built in header search path
 local builtin_paths_cmd = 'echo | gcc -xc -v - 2>&1 | cat'
-function _M.create_builtin_paths_cache()
-	local path = _M.current_path()
-	local v = _M.get_gcc_version()
-	os.execute('echo "'..v..'">'..builtin_paths..".version")
-	os.execute(builtin_paths_cmd..'>>'..builtin_paths)
+function create_builtin_paths_cache()
+	assert(_M.gcc_version(), "gcc need to be installed to create cache")
+	os.execute(builtin_paths_cmd..'>'..builtin_paths)
 end
-local function get_builtin_paths()
-	if _M.file_exists(builtin_paths) then
-		local v = _M.get_gcc_version()
-		if v ~= io.popen(('cat %s'):format(builtin_paths..".version")):read('*a') then
+function _M.builtin_paths()
+	if _M.file_exists(version_file) then
+		local v = _M.gcc_version()
+		if v and (v ~= io.popen(('cat %s'):format(version_file)):read('*a')) then
 			create_builtin_paths_cache()
+			create_version_file_cache(v)
 		end
 		return io.popen(([[cat %s]]):format(builtin_paths))
 	end
 	return io.popen(builtin_paths_cmd)
 end
 function _M.add_builtin_paths(state)
-	local p = get_builtin_paths()
+	local p = _M.builtin_paths()
 	local search_path_start
 	while true do
 		-- TODO : parsing unstructured compiler output.
@@ -108,8 +130,13 @@ function _M.add_builtin_paths(state)
 	end
 end
 function _M.create_builtin_config_cache()
+	create_version_file_cache()
 	create_builtin_paths_cache()
 	create_builtin_defs_cache()
+	os.execute('chmod -R 766 '..cache_dir)
+end
+function _M.clear_builtin_config_cache()
+	os.execute('rm '..cache_dir.._M.PATH_SEPS.."*")
 end
 
 return _M
