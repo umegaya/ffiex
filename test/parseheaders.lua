@@ -3,7 +3,6 @@ function try_parse_headers(directory)
     local ffi = require "ffiex.init"
     local blacklist
     if ffi.os == "OSX" then
-    	ffi.cdef "#define XP_NO_X_HEADERS"
         blacklist = {
             "cxxabi.h", -- namespace is contained
             "nc_tparm.h", -- TPARM_1 declared twice

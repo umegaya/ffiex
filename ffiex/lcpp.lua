@@ -122,6 +122,7 @@ local MLCOMMENT       = "/[*].-[*]/"
 local WHITESPACES     = "%s+"
 local OPTSPACES       = "%s*"
 local IDENTIFIER      = "[_%a][_%w]*"
+local FUNCMACRO_ARG	  = "[_%a%.][_%w%.]*" -- support ...
 local NOIDENTIFIER    = "[^%w_]+"
 local FILENAME        = "[0-9a-zA-Z.%-_/\\]+"
 local TEXT            = ".+"
@@ -167,7 +168,7 @@ local PRAGMA          = STARTL.._PRAGMA
 -- speedups
 local TRUEMACRO = STARTL.."("..IDENTIFIER..")%s*$"
 local REPLMACRO = STARTL.."("..IDENTIFIER..")"..WHITESPACES.."(.+)$"
-local FUNCMACRO = STARTL.."("..IDENTIFIER..")%(([_%s%w,]*)%)%s*(.*)"
+local FUNCMACRO = STARTL.."("..IDENTIFIER..")%(([_%s%w%.,]*)%)%s*(.*)"
 
 
 -- ------------
@@ -429,7 +430,7 @@ local LCPP_TOKENIZE_COMMENT = {
 	string = false,
 	keywords = { 
 		MLCOMMENT = "^/%*.-%*/",
-		SLCOMMENT = "^//.-\n",
+		SLCOMMENT = "^//[^\n]*\n?",
 		STRING_LITERAL = '^"[^"]*"',
 	},
 }
@@ -651,8 +652,8 @@ local function processLine(state, line)
 		}
 		for _,d in ipairs({"ifdef","ifndef","ifexp","elif","elseif","else","endif"}) do
 			local m = cmd:match(dmap[d])
+			-- print("match|"..d.."|"..tostring(dmap[d]).."|"..line)
 			if m then
-			--print("match|"..d.."|"..tostring(dmap[d]))
 				local skip = state:skip()
 				if d == "ifdef"   then state:openBlock(state:defined(m))      end
 				-- if skipped, it may have undefined expression. so not parse them
@@ -755,9 +756,7 @@ local function processLine(state, line)
 
 	
 	--[[ APPLY MACROS ]]--
-	-- print(line)
 	local _line,more = state:apply(line);
-	-- print('endprocess:'.._line)
 	if more then
 		state.incompleteLine = line
 		return ""
@@ -1284,6 +1283,7 @@ local function replaceArgs(argsstr, repl)
 		end
 	end
 	local v = repl:gsub("%$(%d+)", function (m) return args[tonumber(m)] or "" end)
+	v = v:gsub("__VA_ARGS__%((%d+)%)", function (m) return table.concat({unpack(args, m)}, ",") end)
 	-- print("replaceArgs:" .. repl .. "|" .. tostring(#args) .. "|" .. v)
 	return v
 end
@@ -1297,16 +1297,20 @@ local function parseFunction(state, input)
 
 	-- rename args to $1,$2... for later gsub
 	local noargs = 0
-	for argname in argsstr:gmatch(IDENTIFIER) do
+	for argname in argsstr:gmatch(FUNCMACRO_ARG) do
 		noargs = noargs + 1
 		-- avoid matching substring of another identifier (eg. attrib matches __attribute__ and replace it)
-		repl = repl:gsub("(#*)(%s*)("..argname..")([_%w]?)", function (s1, s2, s3, s4)
-			if #s4 <= 0 then
-				return (#s1 == 1) and ("\"$"..noargs.."\"") or (s1..s2.."$"..noargs)
-			else
-				return s1..s2..s3..s4
-			end
-		end)
+		if argname ~= "..." then		
+			repl = repl:gsub("(#*)(%s*)("..argname..")([_%w]?)", function (s1, s2, s3, s4)
+				if #s4 <= 0 then
+					return (#s1 == 1) and ("\"$"..noargs.."\"") or (s1..s2.."$"..noargs)
+				else
+					return s1..s2..s3..s4
+				end
+			end)
+		else
+			repl = repl:gsub("__VA_ARGS__", "__VA_ARGS__("..noargs..")")
+		end
 	end
 	-- remove concat (after replace matching argument name to $1, $2, ...)
 	repl = repl:gsub("%s*##%s*", "")
@@ -1474,6 +1478,7 @@ function lcpp.test(suppressMsg)
 
 
 		#define TRUE
+		#define ZERO (0)
 		#define ONE (1)
 		#define TWO (2)
 		#define THREE_FUNC(x) (3)
@@ -1546,7 +1551,13 @@ function lcpp.test(suppressMsg)
 		# if defined TRUE 
 			lcpp_test.assertTrue() -- valid strange syntax test (spaces and missing brackets)
 		# endif
-
+		# if 1
+		#else
+			assert(false, "#if 1 should evaluate as true")
+		#endif
+		# if ZERO
+			assert(false, "#if 0 should evaluate as false")
+		#endif
 
 		msg = "#define if/else test"
 		#ifdef TRUE
@@ -1913,7 +1924,12 @@ function lcpp.test(suppressMsg)
 		msg = "process string literal which contains escaped \""
 		#define BUGGY_MACRO ("if string contains \", text here ignored")
 		assert(BUGGY_MACRO == "if string contains \", text here ignored", msg)
-		
+
+		msg = "test VA_ARGS"
+		#define SUM_AND_CONCAT(a, b, c, ...) (a + b + c + #{__VA_ARGS__})
+		assert(SUM_AND_CONCAT(1, 2, 3, "x", "y", "z") == 9, msg)
+		#if HOGE
+		#endif // HOGE
 	]]
 	lcpp.FAST = false	-- enable full valid output for testing
 	lcpp.SELF_TEST = true

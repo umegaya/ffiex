@@ -8,7 +8,7 @@ local originalCompileFile = lcpp.compileFile
 local lastTryPath
 local currentState
 
-local function search_header_file(filename, predefines, nxt, _local)
+local function search_header_file(filename, predefines, nxt, _local, no_throw)
 	lastTryPath = lastTryPath or predefines.__FILE__:gsub('^(.*/)[^/]+$', '%1')
 	if nxt then
 		local process
@@ -49,17 +49,23 @@ local function search_header_file(filename, predefines, nxt, _local)
 		end
 	end
 	--> OMG header not found...
-	local paths = ""
-	for _,path in ipairs(currentState.searchPath) do
-		paths = paths .. "\n" .. path
+	if not no_throw then
+		local paths = ""
+		for _,path in ipairs(currentState.searchPath) do
+			paths = paths .. "\n" .. path
+		end
+		error(filename .. ' not found in:' .. paths .. "\n at \n" .. debug.traceback())
 	end
-	error(filename .. ' not found in:' .. paths .. "\n at \n" .. debug.traceback())
 	return nil
 end
 
 lcpp.compileFile = function (filename, predefines, macro_sources, nxt, _local)
 	filename, lastTryPath = search_header_file(filename, predefines, nxt, _local)
-	--> print('include:'..filename)	
+	if ffi.__DEBUG_CDEF__ then
+		local out = {originalCompileFile(filename, predefines, macro_sources, nxt)}
+ print('include:'..filename)--.."=>"..out[1])
+ 		return unpack(out)
+ 	end
 	return originalCompileFile(filename, predefines, macro_sources, nxt)
 end
 
@@ -70,7 +76,13 @@ local header_name = "__has_include_next%(%s*[\"<]+(.*)[\">]+%s*%)"
 local function has_include_next(decl)
 	local file = decl:match(header_name)
 	-- print("has_include_next:", file, decl)
-	return search_header_file(file, currentState.lcpp_defs, true, false) ~= nil and "1" or "0"
+	return search_header_file(file, currentState.lcpp_defs, true, false, true) ~= nil and "1" or "0"
+end
+local header_name2 = "__has_include%(%s*[\"<]+(.*)[\">]+%s*%)"
+local function has_include(decl)
+	local file = decl:match(header_name2)
+	-- print("has_include_next:", file, decl)
+	return search_header_file(file, currentState.lcpp_defs, false, false, true) ~= nil and "1" or "0"
 end
 local function __asm(exp)
 	return exp:gsub("__asm_*%s*%b()", "")
@@ -224,6 +236,7 @@ function ffi_state:init(try_init_path)
 
 	-- add built in macro here
 	self.lcpp_defs = {
+		["__has_include"] = has_include, 
 		["__has_include_next"] = has_include_next, 
 		-- i don't know the reason but OSX __asm alias not works for luajit symbol search
 		["__asm"] = __asm, -- just return empty string TODO : investigate reason.
@@ -265,6 +278,8 @@ function ffi_state:parse(decl, tmptree)
 	end
 	currentState = self
 	local output, state = lcpp.compile(decl, self.lcpp_defs, self.lcpp_macro_sources)
+	--print('output='..output)
+	local has_ssize_t = output:match('ssize_t;')
 	self.lcpp_defs = state.defines
 	self.lcpp_macro_sources = state.macro_sources
 	if tmptree and self.tree then
