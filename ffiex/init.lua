@@ -8,7 +8,7 @@ local originalCompileFile = lcpp.compileFile
 local lastTryPath
 local currentState
 
-local function search_header_file(filename, predefines, nxt, _local)
+local function search_header_file(filename, predefines, nxt, _local, no_throw)
 	lastTryPath = lastTryPath or predefines.__FILE__:gsub('^(.*/)[^/]+$', '%1')
 	if nxt then
 		local process
@@ -49,17 +49,23 @@ local function search_header_file(filename, predefines, nxt, _local)
 		end
 	end
 	--> OMG header not found...
-	local paths = ""
-	for _,path in ipairs(currentState.searchPath) do
-		paths = paths .. "\n" .. path
+	if not no_throw then
+		local paths = ""
+		for _,path in ipairs(currentState.searchPath) do
+			paths = paths .. "\n" .. path
+		end
+		error(filename .. ' not found in:' .. paths .. "\n at \n" .. debug.traceback())
 	end
-	error(filename .. ' not found in:' .. paths .. "\n at \n" .. debug.traceback())
 	return nil
 end
 
 lcpp.compileFile = function (filename, predefines, macro_sources, nxt, _local)
 	filename, lastTryPath = search_header_file(filename, predefines, nxt, _local)
-	--> print('include:'..filename)	
+	if ffi.__DEBUG_CDEF__ then
+		local out = {originalCompileFile(filename, predefines, macro_sources, nxt)}
+ print('include:'..filename)--.."=>"..out[1])
+ 		return unpack(out)
+ 	end
 	return originalCompileFile(filename, predefines, macro_sources, nxt)
 end
 
@@ -70,7 +76,13 @@ local header_name = "__has_include_next%(%s*[\"<]+(.*)[\">]+%s*%)"
 local function has_include_next(decl)
 	local file = decl:match(header_name)
 	-- print("has_include_next:", file, decl)
-	return search_header_file(file, currentState.lcpp_defs, true, false) ~= nil and "1" or "0"
+	return search_header_file(file, currentState.lcpp_defs, true, false, true) ~= nil and "1" or "0"
+end
+local header_name2 = "__has_include%(%s*[\"<]+(.*)[\">]+%s*%)"
+local function has_include(decl)
+	local file = decl:match(header_name2)
+	-- print("has_include_next:", file, decl)
+	return search_header_file(file, currentState.lcpp_defs, false, false, true) ~= nil and "1" or "0"
 end
 local function __asm(exp)
 	return exp:gsub("__asm_*%s*%b()", "")
@@ -90,13 +102,20 @@ local function replace_table(src, rep)
 	end
 end
 
-local function macro_to_lua_func(macro_source)
+local function macro_to_lua_func(st, macro_source)
 	return function (...)
 		local args = {...}
-		local src = "return " .. macro_source:gsub("%$(%d+)", function (m) return args[tonumber(m)] end)
-		local ok, r = pcall(loadstring, src)
-		if not ok then error(r) end
-		return r()
+		local state = st:expr_processor()
+		local src = macro_source:gsub("%$(%d+)", function (m) return args[tonumber(m)] end)
+		local val = state:parseExpr(src)
+		-- print(val, src)
+		if type(val) ~= 'string' then
+			return val
+		else -- more parse with lua lexer
+			local f, err = loadstring("return "..val)
+			if not f then error(err) end
+			return f()
+		end
 	end
 end
 
@@ -188,19 +207,27 @@ local defs_mt = {
 				return rawget(t, k)
 			end
 		elseif type(def) == 'string' then
-			local state = lcpp.init('', st.lcpp_defs, st.lcpp_macro_sources)
+			local state = st:expr_processor()
 			local expr = state:parseExpr(def)
 			rawset(t, k, expr)
 			return rawget(t, k)
 		elseif type(def) == 'function' then
 			def = st.lcpp_macro_sources[k]
 			if not def then return nil end
-			def = macro_to_lua_func(def)
+			def = macro_to_lua_func(st, def)
 		end
 		rawset(t, k, def)
 		return def
 	end
 }
+function ffi_state:expr_processor()
+	if not self.processor then
+		self.processor = lcpp.init('', {}, {})
+	end
+	self.processor.defines = self.lcpp_defs
+	self.processor.macro_sources = self.lcpp_macro_sources
+	return self.processor
+end
 function ffi_state:init(try_init_path)
 	self.defs = setmetatable({ ["#state"] = self }, defs_mt)
 	self.searchPath = {"./"}
@@ -209,6 +236,7 @@ function ffi_state:init(try_init_path)
 
 	-- add built in macro here
 	self.lcpp_defs = {
+		["__has_include"] = has_include, 
 		["__has_include_next"] = has_include_next, 
 		-- i don't know the reason but OSX __asm alias not works for luajit symbol search
 		["__asm"] = __asm, -- just return empty string TODO : investigate reason.
@@ -217,16 +245,22 @@ function ffi_state:init(try_init_path)
 	-- if gcc is available, try using it for initial builder.
 	if try_init_path then
 		local ok, rv = pcall(os.execute, "gcc -v 2>/dev/null")
-		if ok and (rv == 0) then
+		if ok then
+			local has_gcc = (rv == 0)
 			ok, rv = pcall(require, 'ffiex.builder.gcc')
 			if ok and rv then
 				local builder = rv.new()
-				builder:init(self)
-				self.builder = builder
-				self:copt({ cc = "gcc" })
-			else
-				print('gcc available but fail to initialize gcc builder:'..rv)
+				if has_gcc then
+					builder:init(self)
+					self.builder = builder
+					self:copt({ cc = "gcc" })
+				else
+					ok, rv = pcall(builder.init, builder, self)
+				end
 			end
+		end
+		if not ok then
+			print('gcc available but fail to initialize gcc builder:'..rv)
 		end
 	end
 end
@@ -250,6 +284,8 @@ function ffi_state:parse(decl, tmptree)
 	end
 	currentState = self
 	local output, state = lcpp.compile(decl, self.lcpp_defs, self.lcpp_macro_sources)
+	--print('output='..output)
+	local has_ssize_t = output:match('ssize_t;')
 	self.lcpp_defs = state.defines
 	self.lcpp_macro_sources = state.macro_sources
 	if tmptree and self.tree then
@@ -516,6 +552,12 @@ function ffi.import(symbols)
 end
 function ffi.newstate()
 	return ffi_state.new()
+end
+function ffi.init_cdef_cache()
+	(require 'ffiex.util').create_builtin_config_cache()
+end
+function ffi.clear_cdef_cache()
+	(require 'ffiex.util').clear_builtin_config_cache()
 end
 
 return ffi

@@ -1,5 +1,7 @@
+ffiex/cache/*
 tmp/*.h
 **/.DS_Store
 .DS_Store
 a.out
 *.c
+tmp.txt

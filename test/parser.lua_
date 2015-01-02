@@ -1,4 +1,5 @@
 local ffi = require "ffiex.init"
+-- ffi.__DEBUG_CDEF__ = true
 local required
 local expath 
 if ffi.os == "OSX" then
@@ -13,6 +14,7 @@ if ffi.os == "OSX" then
 		["tkDecls.h"] = {"tcl.h"}, -- EXTERN, CONST84_RETURN
 		["lber.h"] = {"lber_types.h"},
 		["ldif.h"] = {"lber_types.h"},
+		["reboot2.h"] = {"sys/types.h"}, -- ssize_t
 		["sys/_select.h"] = {"sys/_types/_fd_def.h"},
 		["sys/acct.h"] = {"i386/types.h", "sys/_types/_uid_t.h", "sys/_types/_gid_t.h", "sys/_types/_dev_t.h"},
 		["sys/acl.h"] = {"i386/types.h", "sys/_types/_uid_t.h", "sys/_types/_gid_t.h", "sys/_types/_dev_t.h"},
@@ -44,6 +46,7 @@ if ffi.os == "OSX" then
 		["netinet/udp_var.h"] = {"net/if.h", "netinet/ip_var.h", "netinet/udp.h"}, -- struct ipovly, struct udphdr
 	}
 	ffi.cdef "#define XP_NO_X_HEADERS"
+	ffi.cdef "#define _DNS_SD_LIBDISPATCH (0)"
 	ffi.cdef "#include <sys/types.h>"
 	ffi.cdef "#include <netinet/in.h>"
 	ffi.cdef "#include <stdio.h>"
