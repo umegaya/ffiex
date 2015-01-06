@@ -130,6 +130,8 @@ local STRINGIFY       = "#"
 local STRINGIFY_BYTE  = STRINGIFY:byte(1)
 local STRING_LITERAL  = ".*"
 local EXPRESSION      = ".*"
+local CHAR_LITERAL	  = "L?'.*'"
+local CTYPE_DECL	  = "[_%a][_%w%s]*"
 
 -- BNF WORDS
 local _INCLUDE        = "include"
@@ -465,7 +467,7 @@ local LCPP_TOKENIZE_INTEGER = {
 	},
 	keywords = { 
 		STRING_LITERAL = '^"[^"]*"',
-		CHAR_LITERAL = "^L'.*'",
+		CHAR_LITERAL = "^"..CHAR_LITERAL,
 		HEX_LITERAL = '^[%+%-%~]?%s*0x[a-fA-F%d]+[uUlL]*',
 		BIN_LITERAL = '^[%+%-%~]?%s*0b%d+[uUlL]*',
 		OCT_LITERAL = '^[%+%-%~]?%s*0%d+[uUlL]*',
@@ -473,14 +475,50 @@ local LCPP_TOKENIZE_INTEGER = {
 		NUMBER_LITERAL = '^[%+%-%~]?%s*%d+[%.]?%d*[uUlL]+',
 	},
 }
+-- luajit reports error with L postfix of integer, so remove them
+-- eg) 0xFFFFFFFFL 
+local function trimBadNumericPostfix(input)
+	-- print('parseCInteger:input:' .. input .. "\n" .. debug.traceback())
+	local out = {}
+	for k, v, start, end_ in tokenizer(input, LCPP_TOKENIZE_INTEGER) do
+	-- print('parseCInteger:' .. k .. "|" .. v)
+		local unary, n
+		if k == "HEX_LITERAL" then 
+			table.insert(out, v:match('([%+%-%~]?0x[a-fA-F%d]+[uU]*)[lL]*'))
+		elseif k == "NUMBER_LITERAL" then 
+			table.insert(out, v:match('([%+%-%~]?[^lL]+)[lL]*'))
+		elseif k == "BIN_LITERAL" then 
+			table.insert(out, v:match('([%+%-%~]?0b[01]+[uU]*)[lL]*'))
+		elseif k == "OCT_LITERAL" then 
+			table.insert(out, v:match('([%+%-%~]?0%d+[uU]*)[lL]*'))
+		else
+			table.insert(out, input:sub(start, end_))
+		end
+	end
+	local str = table.concat(out)
+	-- print('parseCInteger:result:'..str)
+	return str
+end
 local function parseCInteger(input)
-	-- print('parseCInteger:input:' .. input)
+	-- print('parseCInteger:input:' .. input .. "\n" .. debug.traceback())
 	local out = {}
 	for k, v, start, end_ in tokenizer(input, LCPP_TOKENIZE_INTEGER) do
 	-- print('parseCInteger:' .. k .. "|" .. v)
 		local unary, n
 		if k == "CHAR_LITERAL" then
-			table.insert(out, tostring(string.byte(loadstring("return \"" .. v:gsub("^L%'(.+)%'", "%1") .. "\"")())))
+			local body = v:match("^L?'(.*)'")
+			if body:byte() == ('\\'):byte() then
+				if body:byte(2) == ('x'):byte() then -- seems hex character representation
+					-- print('CHAR_LITERAL:hex:'..body:sub(3))
+					n = tonumber(body:sub(3), 16)
+				else -- seems octal character representation
+					-- print('CHAR_LITERAL:octet:'..body:sub(2))
+					n = tonumber(body:sub(2), 8)
+				end
+			else
+				n = body:byte()
+			end
+			table.insert(out, tostring(n))
 		elseif k == "HEX_LITERAL" then 
 			unary, v = v:match('([%+%-%~]?)0x([a-fA-F%d]+)[uUlL]*')
 			n = tonumber(v, 16)
@@ -585,6 +623,8 @@ local function apply(state, input)
 						if cnt > 0 then
 							repl = macro(decl)
 							-- print("d&r:"..decl.."|"..repl)
+							-- evaluate and replace functional macro and restart applying process
+							-- because we look ahead parse buffer to process functional macro argument correctly.
 							expand = true
 							table.insert(out, repl)
 							table.insert(out, input:sub(end_ + #decl))
@@ -618,7 +658,7 @@ local function apply(state, input)
 
 	-- C liberal string concatenation, processing U,L,UL,LL
 	-- print('input ==> ' .. input .. "|#####|" .. concatStringLiteral(input))
-	return parseCInteger(concatStringLiteral(input)),false
+	return trimBadNumericPostfix(concatStringLiteral(input)),false
 end
 
 -- processes an input line. called from lcpp doWork loop
@@ -657,10 +697,10 @@ local function processLine(state, line)
 				local skip = state:skip()
 				if d == "ifdef"   then state:openBlock(state:defined(m))      end
 				-- if skipped, it may have undefined expression. so not parse them
-				if d == "ifexp"   then state:openBlock(skip and true or CBoolean(state:parseExpr(m)))    end
+				if d == "ifexp"   then state:openBlock(skip and true or CBoolean(state:parseExpr(m, true)))    end
 				if d == "ifndef"  then state:openBlock(not state:defined(m)) end
-				if d == "elif"    then state:elseBlock((skip and skip < #state.stack) and true or CBoolean(state:parseExpr(m)))     end
-				if d == "elseif"  then state:elseBlock((skip and skip < #state.stack) and true or CBoolean(state:parseExpr(m)))  end
+				if d == "elif"    then state:elseBlock((skip and skip < #state.stack) and true or CBoolean(state:parseExpr(m, true)))     end
+				if d == "elseif"  then state:elseBlock((skip and skip < #state.stack) and true or CBoolean(state:parseExpr(m, true)))  end
 				if d == "else"    then state:elseBlock(true)                      end
 				if d == "endif"   then state:closeBlock()                         end
 				return -- remove structural directives
@@ -803,7 +843,10 @@ local function define(state, key, value, override, macro_source)
 			state.macro_sources[key] = macro_source
 		else
 			local pval = state.defines[key]
-			if pval and (pval ~= value) then error("already defined: "..key) end
+			value = state:prepareMacro(value)
+			if pval and pval ~= value then error("already defined: "..key) end
+			state.defines[key] = value 
+			return
 		end
 	end
 	state.defines[key] = state:prepareMacro(value)
@@ -864,7 +907,9 @@ local LCPP_TOKENIZE_EXPR = {
 	string = false,
 	keywords_order = {
 		"DEFINED", 
+		"SIZEOF",
 		"FUNCTIONAL_MACRO",
+		"CAST", -- unary cast
 		"BROPEN", 
 		"BRCLOSE", 
 
@@ -901,7 +946,9 @@ local LCPP_TOKENIZE_EXPR = {
 	},
 	keywords = { 
 		DEFINED = '^defined', 
+		SIZEOF = '^sizeof', 
 		FUNCTIONAL_MACRO = '^' .. IDENTIFIER .. "%s*%b()",
+		CAST = '^%(%s*'..CTYPE_DECL..'%s*%)%s*',
 		BROPEN = '^[(]', 
 		BRCLOSE = '^[)]', 
 
@@ -930,7 +977,7 @@ local LCPP_TOKENIZE_EXPR = {
 		NOT = '^!', 
 		BNOT = '^~',
 
-		CHAR_LITERAL = "^L?'.*'",
+		CHAR_LITERAL = "^"..CHAR_LITERAL,
 		STRING_LITERAL = '^L?"[^"]*"',
 		HEX_LITERAL = '^[%+%-]?0?x[a-fA-F%d]+[uUlL]*',
 		FPNUM_LITERAL = '^[%+%-]?%d+[%.]?%d*e[%+%-]%d*',
@@ -938,19 +985,41 @@ local LCPP_TOKENIZE_EXPR = {
 	},
 }
 
+local function getCastType(state, v)
+	local decl = v:match(CTYPE_DECL)
+	local eval = state:apply(decl)
+	-- print('getCastType:d&e:'..tostring(decl).."|"..tostring(eval))
+	if decl ~= eval then
+		eval = state:parseExpr(eval, true)
+	-- print('getCastType:d&e2:'..tostring(decl).."|"..tostring(eval))
+		if type(eval) == 'string' then
+			return eval:match(CTYPE_DECL)
+		end
+		return nil
+	else
+		return decl
+	end
+end
+
 local function parseDefined(state, input)
-	local result = false
 	local bropen = false
 	local brclose = false
 	local ident = nil
 	
 	for key, value in input do
+		-- print('parseDefined:'..key.."|"..value)
 		if key == "BROPEN" then
 			bropen = true
 		end
 		if key == "identifier" then
-			 ident = value
-			 if not bropen then break end
+			ident = value
+			if not bropen then break end
+		end
+		if key == "CAST" then
+			ident = value:match(IDENTIFIER) -- because no casts are possible here.
+			bropen = true
+			brclose = true
+			break
 		end
 		if key == "BRCLOSE" and ident then
 			brclose = true
@@ -966,6 +1035,24 @@ local function parseDefined(state, input)
 	error("expression parse error: defined(ident)")
 end
 
+local function parseSizeof(state, input)
+	local idents = {}
+	for key, value in input do
+		-- print('parseSizeof:'..key.."|"..value)
+		if key == "identifier" then
+			table.insert(idents, value)			
+		end
+		if key == "CAST" then
+			return ffi.sizeof(getCastType(state, value))
+		end
+		if key == "BRCLOSE" then
+			-- print('idents:'..table.concat(idents, " "))
+			return ffi.sizeof(table.concat(idents, " "))
+		end
+	end
+	
+	error("expression parse error: sizeof(ident)")
+end
 
 --[[
 order : smaller is higher priority
@@ -987,6 +1074,8 @@ order : smaller is higher priority
 local combination_order = function (op, unary)
 	if unary then
 		if op == '-' or op == '!' or op == '~' then
+			return 2
+		elseif op:match(CTYPE_DECL) then
 			return 2
 		else
 			assert(false, 'unsupported unary operator:' .. op)
@@ -1033,6 +1122,8 @@ evaluate = function (node)
 					v = (not v)
 				elseif uop == '~' then
 					v = bit.bnot(v)
+				elseif uop:match(CTYPE_DECL) then -- cast operator
+					v = ffi.cast(uop, v)
 				else
 					assert(false, 'invalid uop:' .. tostring(uop))			
 				end
@@ -1056,19 +1147,19 @@ evaluate = function (node)
 	elseif node.op == '!=' then
 		return (evaluate(node.l) ~= evaluate(node.r))
 	elseif node.op == '<<' then
-		return bit.lshift(evaluate(node.l), evaluate(node.r))
+		return bit.lshift(tonumber(evaluate(node.l)), tonumber(evaluate(node.r)))
 	elseif node.op == '>>' then
-		return bit.rshift(evaluate(node.l), evaluate(node.r))
+		return bit.rshift(tonumber(evaluate(node.l)), tonumber(evaluate(node.r)))
 	elseif node.op == '&&' then
 		return (CBoolean(evaluate(node.l)) and CBoolean(evaluate(node.r)))
 	elseif node.op == '||' then
 		return (CBoolean(evaluate(node.l)) or CBoolean(evaluate(node.r)))
 	elseif node.op == '&' then
-		return bit.band(evaluate(node.l), evaluate(node.r))
+		return bit.band(tonumber(evaluate(node.l)), tonumber(evaluate(node.r)))
 	elseif node.op == '|' then
-		return bit.bor(evaluate(node.l), evaluate(node.r))
+		return bit.bor(tonumber(evaluate(node.l)), tonumber(evaluate(node.r)))
 	elseif node.op == '^' then
-		return bit.bxor(evaluate(node.l), evaluate(node.r))
+		return bit.bxor(tonumber(evaluate(node.l)), tonumber(evaluate(node.r)))
 	elseif node.op == '<=' then
 		return (evaluate(node.l) <= evaluate(node.r))
 	elseif node.op == '>=' then
@@ -1085,7 +1176,7 @@ end
 local function setValue(node, v)
 	-- print('setValue:' .. tostring(v).."|"..tostring(node.uops))-- .. "\t" .. debug.traceback())
 	if not node.op then
-		assert(not node.v, debug.traceback())
+		assert(not node.v)
 		node.v = v
 	else
 		assert(node.l and (not node.r))
@@ -1099,7 +1190,7 @@ local function setUnaryOp(node, uop)
 	table.insert(node.uops, 1, uop)
 end
 
-local function parseExpr(state, input) 
+local function parseExpr(state, input, no_cast_possible) 
 	local node = {}
 	local root = node
 	-- first call gets string input. rest uses tokenizer
@@ -1111,6 +1202,23 @@ local function parseExpr(state, input)
 	for type, value in input do
 	-- print("type:"..type.." value:"..value)
 		-- unary operator
+		if type == "CAST" then
+			if no_cast_possible then
+				-- if called from defined directives or cast expression, no casts are possible.
+				setValue(node, state:parseExpr(value:match(CTYPE_DECL)))
+				break
+			else
+				local tp = getCastType(state, value)
+				if tp then
+					-- print('tp:'..tp)
+					setUnaryOp(node, tp)
+				else
+					-- value is not c type declaration. 
+					-- maybe parenthesed macro symbol
+					setValue(node, state:parseExpr(value:match(CTYPE_DECL)))
+				end	
+			end
+		end
 		if type == "NOT" or 
 			type == "BNOT" then
 			setUnaryOp(node, value)
@@ -1213,12 +1321,14 @@ local function parseExpr(state, input)
 					node.op = value
 				end
 			else -- unary operator : uop1 uop2 ... [uopN]
-				assert(type == "MINUS", "error: invalid unary operator:" .. value)
+				assert(type == "MINUS", "error: invalid unary operator:" .. value .. "|" .. type)
 				setUnaryOp(node, value)
 			end
 		end
 		if type == "DEFINED" then
 			setValue(node, parseDefined(state, input))
+		elseif type == "SIZEOF" then
+			setValue(node, parseSizeof(state, input))
 		elseif type == "identifier" or type == "FUNCTIONAL_MACRO" then
 			-- print('ident:' .. value)
 			local eval = state:apply(value)
@@ -1234,7 +1344,7 @@ local function parseExpr(state, input)
 				-- undefined macro symbol is always treated as 0.
 				-- http://gcc.gnu.org/onlinedocs/cpp/If.html#If
 				setValue(node, 0)
-			end
+			end	
 		end
 	end
 	
@@ -1259,7 +1369,7 @@ local function prepareMacro(state, input)
 		end
 		input = table.concat(out)
 	until not concat
-	return input
+	return parseCInteger(input)
 end
 
 -- macro args replacement function slower but more torelant for pathological case 
@@ -1705,20 +1815,20 @@ function lcpp.test(suppressMsg)
 		msg = "macro chaining"
 		#define FOO 0x7B
 		#define BAR (FOO+0x7B)
-		assert(-BAR == -0x7B*2, msg)
+		assert(-BAR == -0x7B*2, msg.."1")
 		#define BAZ 456
 		#define BLUR BA##Z
-		assert(BLUR == 456, msg)
+		assert(BLUR == 456, msg.."2")
 		local testfunc = function (x) return "["..tostring(x).."]" end
 		#define FOOBAR(x) testfunc(x)
-		assert(FOOBAR(1) == "[1]", msg)
+		assert(FOOBAR(1) == "[1]", msg.."3")
 		#define testfunc(x)
 		#define FOOBAZ(x) testfunc(x)
-		assert(check_argnum(FOOBAR(1)) == 0, msg)
-		assert(check_argnum(FOOBAZ(1)) == 0, msg)
+		assert(check_argnum(FOOBAR(1)) == 0, msg.."4")
+		assert(check_argnum(FOOBAZ(1)) == 0, msg.."5")
 		#undef testfunc
-		assert(FOOBAR(1) == "[1]", msg)
-		assert(FOOBAZ(1) == "[1]", msg)
+		assert(FOOBAR(1) == "[1]", msg.."6")
+		assert(FOOBAZ(1) == "[1]", msg.."7")
 
 
 		msg = "indentation test"
