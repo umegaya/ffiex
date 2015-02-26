@@ -592,7 +592,7 @@ end
 -- apply currently known macros to input (and returns it)
 local LCPP_TOKENIZE_APPLY_MACRO = {
 	keywords = { 
-		DEFINED = "^defined%s*%(%s*"..IDENTIFIER.."%s*%)"	,
+		DEFINED = "^defined%s*%(%s*"..IDENTIFIER.."%s*%)",
 	},
 }
 local function apply(state, input)
@@ -618,16 +618,21 @@ local function apply(state, input)
 						repl = tostring(macro)
 						expand = (repl ~= v)
 					elseif type(macro) == "function" then
-						local decl,cnt = input:sub(start):gsub("^[_%a][_%w]*%s*%b()", "%1")
-						-- print('matching:'..input.."|"..decl.."|"..cnt)
-						if cnt > 0 then
+						local decl = input:sub(start):match("^[_%a][_%w]*%s*%b()")
+						-- local decl,args = input:sub(start):match("^([_%a][_%w]*%s*)(%b())")
+						-- print('matching:'..input.."|"..tostring(decl).."|"..tostring(args).."|"..tostring(start))
+						if decl then
+							-- local n_read = #decl + #args
+							-- args = state:apply(args)
+							-- print('args:'..tostring(args))
+							-- decl = decl..args
 							repl = macro(decl)
-							-- print("d&r:"..decl.."|"..repl)
+							-- print("d&r:"..decl.."|"..repl.."|"..input:sub(start + n_read))
 							-- evaluate and replace functional macro and restart applying process
 							-- because we look ahead parse buffer to process functional macro argument correctly.
 							expand = true
 							table.insert(out, repl)
-							table.insert(out, input:sub(end_ + #decl))
+							table.insert(out, input:sub(start + #decl))
 							break
 						else
 							if input:sub(start):find("^[_%a][_%w]*%s*%(") then
@@ -1373,7 +1378,7 @@ local function prepareMacro(state, input)
 end
 
 -- macro args replacement function slower but more torelant for pathological case 
-local function replaceArgs(argsstr, repl)
+local function replaceArgs(argsstr, repl, state)
 	local args = {}
 	argsstr = argsstr:sub(2,-2)
 	-- print('argsstr:'..argsstr)
@@ -1392,7 +1397,13 @@ local function replaceArgs(argsstr, repl)
 			comma = true
 		end
 	end
-	local v = repl:gsub("%$(%d+)", function (m) return args[tonumber(m)] or "" end)
+	local v = repl:gsub("%$(#?)(%d+)", function (stringify, m) 
+		if #stringify > 0 then
+			return args[tonumber(m)] and state:apply(args[tonumber(m)]) or ""
+		else
+			return args[tonumber(m)] or "" 
+		end
+	end)
 	v = v:gsub("__VA_ARGS__%((%d+)%)", function (m) return table.concat({unpack(args, m)}, ",") end)
 	-- print("replaceArgs:" .. repl .. "|" .. tostring(#args) .. "|" .. v)
 	return v
@@ -1412,8 +1423,9 @@ local function parseFunction(state, input)
 		-- avoid matching substring of another identifier (eg. attrib matches __attribute__ and replace it)
 		if argname ~= "..." then		
 			repl = repl:gsub("(#*)(%s*)("..argname..")([_%w]?)", function (s1, s2, s3, s4)
+				-- print('parseFunction'.."["..tostring(s1).."]".."["..tostring(s2).."]".."["..tostring(s3).."]".."["..tostring(s4).."]")
 				if #s4 <= 0 then
-					return (#s1 == 1) and ("\"$"..noargs.."\"") or (s1..s2.."$"..noargs)
+					return (#s1 == 1) and ("\"$#"..noargs.."\"") or (s1..s2.."$"..noargs)
 				else
 					return s1..s2..s3..s4
 				end
@@ -1428,7 +1440,7 @@ local function parseFunction(state, input)
 	-- build macro funcion
 	local func = function(input)
 		return input:gsub(name.."%s*(%b())", function (match)
-			return replaceArgs(match, repl)
+			return replaceArgs(match, repl, state)
 		end)
 	end
 	
@@ -1577,6 +1589,11 @@ function lcpp.test(suppressMsg)
 		/*
 		 assert(false, "multi-line comment not removed")
 		 */
+		#define PLUS1(x) x + 1
+		assert(PLUS1(__LINE__) == 14, "__LINE__ should evaluate before PLUS1 evaluated")
+		#define TOSTR(x) # x
+		assert(TOSTR(__LINE__) == "15", "__LINE__ should evaluate before TOSTR evaluated")
+		assert(TOSTR() == "", "empty stringify should not cause error")
 		/* pathological case which contains single line comment start in multiline comments.
 		 * e.g. this multiline comment should be finish next line.
 		 * http://foobar.com */ // comment
