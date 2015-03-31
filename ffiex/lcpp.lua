@@ -619,15 +619,10 @@ local function apply(state, input)
 						expand = (repl ~= v)
 					elseif type(macro) == "function" then
 						local decl = input:sub(start):match("^[_%a][_%w]*%s*%b()")
-						-- local decl,args = input:sub(start):match("^([_%a][_%w]*%s*)(%b())")
 						-- print('matching:'..input.."|"..tostring(decl).."|"..tostring(args).."|"..tostring(start))
 						if decl then
-							-- local n_read = #decl + #args
-							-- args = state:apply(args)
-							-- print('args:'..tostring(args))
-							-- decl = decl..args
 							repl = macro(decl)
-							-- print("d&r:"..decl.."|"..repl.."|"..input:sub(start + n_read))
+							-- print("d&r:"..decl.."|"..repl.."|"..input:sub(start + #decl))
 							-- evaluate and replace functional macro and restart applying process
 							-- because we look ahead parse buffer to process functional macro argument correctly.
 							expand = true
