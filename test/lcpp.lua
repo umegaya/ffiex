@@ -10,4 +10,5 @@ struct var {
     struct __darwin_pthread_handler_rec *__next;
 };
 #endif // HOGE]])
+
 return true
