@@ -131,7 +131,7 @@ local STRINGIFY_BYTE  = STRINGIFY:byte(1)
 local STRING_LITERAL  = ".*"
 local EXPRESSION      = ".*"
 local CHAR_LITERAL	  = "L?'.*'"
-local CTYPE_DECL	  = "[_%a][_%w%s]*"
+local CTYPE_DECL	  = "[_%a][_%w%s]*%*?"
 
 -- BNF WORDS
 local _INCLUDE        = "include"
@@ -1073,7 +1073,7 @@ order : smaller is higher priority
 ]]
 local combination_order = function (op, unary)
 	if unary then
-		if op == '-' or op == '!' or op == '~' then
+		if op == '-' or op == '!' or op == '~' or op == '*' then
 			return 2
 		elseif op:match(CTYPE_DECL) then
 			return 2
@@ -1122,6 +1122,8 @@ evaluate = function (node)
 					v = (not v)
 				elseif uop == '~' then
 					v = bit.bnot(v)
+				elseif uop == '*' then
+					v = v[0]
 				elseif uop:match(CTYPE_DECL) then -- cast operator
 					v = ffi.cast(uop, v)
 				else
@@ -1271,7 +1273,7 @@ local function parseExpr(state, input, no_cast_possible)
 			type == "MT" then
 			if node.op then 
 				if not node.r then -- during parse right operand : uop1 uop2 ... uopN operand1 op1 uop(N+1) uop(N+2) ... [uop(N+K)]
-					assert(type == "MINUS",  "error: operators come consequently: " .. tostring(node.op) .. " and " .. tostring(value))
+					assert(type == "MINUS" or type == "MULTIPLY",  "error: operators come consequently: " .. tostring(node.op) .. " and " .. tostring(value))
 					-- unary operater after binary operator
 					setUnaryOp(node, value)
 				else -- uop1 uop2 ... uopN operand1 op1 uop(N+1) uop(N+2) ... uop(N+M) operand2 [op2]
@@ -1321,7 +1323,7 @@ local function parseExpr(state, input, no_cast_possible)
 					node.op = value
 				end
 			else -- unary operator : uop1 uop2 ... [uopN]
-				assert(type == "MINUS", "error: invalid unary operator:" .. value .. "|" .. type)
+				assert(type == "MINUS" or type == "MULTIPLY", "error: invalid unary operator:" .. value .. "|" .. type)
 				setUnaryOp(node, value)
 			end
 		end
