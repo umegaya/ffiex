@@ -1,6 +1,10 @@
 local lcpp = require 'ffiex.lcpp'
 local ffi = require 'ffi'
 
+if package.loaded["ffiex"] and package.loaded["ffiex.init"] then
+	assert(false, "loading both ffiex/ffiex.init makes trouble. please unify the name")
+end
+
 -----------------------
 -- search header file 
 -----------------------
@@ -38,7 +42,7 @@ local function search_header_file(filename, predefines, nxt, _local, no_throw)
 		end
 		if not found then
 			for _,path in ipairs(currentState.searchPath) do
---print('try:'..path)
+-- print('try:'..path.."|"..filename)
 				local trypath = (path .. filename)
 				local ok, r = pcall(io.open, trypath, 'r')
 				if ok and r then
