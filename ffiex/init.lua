@@ -306,9 +306,9 @@ function ffi_state:parse(decl, tmptree)
 		return self.tree, output
 	end
 end
-function ffi_state:cdef(decl)
+function ffi_state:cdef(decl, ...)
 	local tmp = self:parse(decl, true)
-	ffi.native_cdef_with_guard(tmp, nil)
+	ffi.native_cdef_with_guard(tmp, nil, ...)
 end
 function ffi_state:define(defs)
 	for k,v in pairs(defs) do
@@ -508,7 +508,7 @@ end
 -----------------------
 -- already imported symbols (and guard them from dupe)
 ffi.imported_csymbols = {}
-function ffi.native_cdef_with_guard(tree, symbols_or_ppcode)
+function ffi.native_cdef_with_guard(tree, symbols_or_ppcode, ...)
 	local injected = parser_lib.inject(tree, symbols_or_ppcode, ffi.imported_csymbols)
 	if ffi.__DEBUG_CDEF__ then
 		print('injected source:[['..injected..']]')
@@ -516,7 +516,7 @@ function ffi.native_cdef_with_guard(tree, symbols_or_ppcode)
 		f:write(injected)
 		f:close()
 	end
-	ffi.lcpp_cdef_backup(injected)
+	ffi.lcpp_cdef_backup(injected, ...)
 	return injected
 end
 
@@ -532,8 +532,8 @@ end
 function ffi.search(path, file, add)
 	return main_ffi_state:search(path, file, add)
 end
-function ffi.cdef(decl)
-	return main_ffi_state:cdef(decl)
+function ffi.cdef(decl, ...)
+	return main_ffi_state:cdef(decl, ...)
 end
 function ffi.define(defs)
 	return main_ffi_state:define(defs)
