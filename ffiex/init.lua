@@ -554,8 +554,8 @@ end
 function ffi.import(symbols)
 	return main_ffi_state:import(symbols)
 end
-function ffi.newstate()
-	return ffi_state.new()
+function ffi.newstate(try_init_path)
+	return ffi_state.new(try_init_path)
 end
 function ffi.init_cdef_cache()
 	(require 'ffiex.util').create_builtin_config_cache()
