@@ -31,6 +31,7 @@ function try_parse_headers(directory)
         	"turbojpeg.h", -- luajit cdef cannot process static const int []
     		"db_cxx.h", -- c++ header
             "gmpxx.h", -- c++ header
+            "t1libx.j",
 	}
     end
     while true do
