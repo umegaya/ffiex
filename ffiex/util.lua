@@ -88,7 +88,7 @@ function _M.clear_builtin_defs(state)
 end
 
 -- add compiler built in header search path
-local builtin_paths_cmd = 'echo | gcc -xc -v - 2>&1 | cat'
+local builtin_paths_cmd = 'echo | gcc -xc -v - 2>&1 | cat 2>/dev/null'
 function create_builtin_paths_cache()
 	assert(_M.gcc_version(), "gcc need to be installed to create cache")
 	os.execute(builtin_paths_cmd..'>'..builtin_paths)
