@@ -5,7 +5,14 @@ if ffi.os == 'OSX' then
 	-- disable all __asm alias (because luajit cannot find aliasing symbols)
 	ffi.cdef "#define __asm(exp)"
 end
-local lib = ffi.load("pthread")
+local lib
+if ffi.os == "OSX" then
+    lib = ffi.C
+elseif ffi.os == "Linux" then
+    lib = ffi.load("pthread")
+else
+    error("invalid os: " .. ffi.os)
+end
 local symbols = {
 	--> from pthread
 	"pthread_t", "pthread_mutex_t", 

@@ -16,7 +16,14 @@ ffi.C.sprintf(msg, "%d:%d", ffi.new("int", 100), ffi.new("int", 200))
 assert(ffi.string(msg) == "100:200")
 
 
-local lib = ffi.load("pthread")
+local lib
+if ffi.os == "OSX" then
+    lib = ffi.C
+elseif ffi.os == "Linux" then
+    lib = ffi.load("pthread")
+else
+    error("invalid os: " .. ffi.os)
+end
 ffi.import({
 "pthread_join",
 "pthread_create",

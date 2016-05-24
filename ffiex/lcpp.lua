@@ -1073,7 +1073,7 @@ order : smaller is higher priority
 ]]
 local combination_order = function (op, unary)
 	if unary then
-		if op == '-' or op == '!' or op == '~' or op == '*' then
+		if op == '-' or op == '!' or op == '~' or op == '*' or op == '+' then
 			return 2
 		elseif op:match(CTYPE_DECL) then
 			return 2
@@ -1124,6 +1124,8 @@ evaluate = function (node)
 					v = bit.bnot(v)
 				elseif uop == '*' then
 					v = v[0]
+				elseif uop == '+' then
+					-- do nothing
 				elseif uop:match(CTYPE_DECL) then -- cast operator
 					v = ffi.cast(uop, v)
 				else
@@ -1273,7 +1275,8 @@ local function parseExpr(state, input, no_cast_possible)
 			type == "MT" then
 			if node.op then 
 				if not node.r then -- during parse right operand : uop1 uop2 ... uopN operand1 op1 uop(N+1) uop(N+2) ... [uop(N+K)]
-					assert(type == "MINUS" or type == "MULTIPLY",  "error: operators come consequently: " .. tostring(node.op) .. " and " .. tostring(value))
+					assert(type == "MINUS" or type == "MULTIPLY" or type == "PLUS",  
+						"error: operators come consequently: " .. tostring(node.op) .. " and " .. tostring(value))
 					-- unary operater after binary operator
 					setUnaryOp(node, value)
 				else -- uop1 uop2 ... uopN operand1 op1 uop(N+1) uop(N+2) ... uop(N+M) operand2 [op2]

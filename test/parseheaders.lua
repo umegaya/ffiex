@@ -30,6 +30,8 @@ function try_parse_headers(directory)
         	"png.h", -- png_structppng_ptr not exist. I think that is typo of "png_structp png_ptr"
         	"turbojpeg.h", -- luajit cdef cannot process static const int []
     		"db_cxx.h", -- c++ header
+            "gmpxx.h", -- c++ header
+            "t1libx.h",
 	}
     end
     while true do
